@@ -16,30 +16,30 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex flex-col items-center px-4 pt-2 pb-20 w-full max-w-md mx-auto bg-white min-h-[calc(100vh-4rem)] justify-center">
-      {/* Logo GoPlay Centralizada e Compacta */}
-      <div className="flex flex-col items-center justify-center my-3">
+    <div className="flex flex-col items-center px-4 pt-4 pb-6 w-full max-w-md mx-auto bg-white min-h-[calc(100dvh-4rem)] justify-around">
+      {/* Logo GoPlay no topo e super clean */}
+      <div className="flex flex-col items-center justify-center my-1.5">
         <img 
           src="/goplay.png" 
           alt="GoPlay Logo" 
-          className="w-16 h-16 object-contain rounded-xl drop-shadow-sm" 
+          className="w-18 h-18 object-contain rounded-xl drop-shadow-sm" 
         />
       </div>
 
-      {/* Grid de Cards de Opções Compacto */}
-      <div className="grid grid-cols-2 gap-3 w-full mt-2">
+      {/* Grid de Cards de Opções Ampliados e Ajustados */}
+      <div className="grid grid-cols-2 gap-3.5 w-full">
         {cards.map((card, idx) => {
           const Icon = card.icon;
           return (
             <button
               key={idx}
               onClick={() => navigate(card.path)}
-              className="flex flex-col items-center justify-center p-3.5 bg-slate-50 border border-slate-100 hover:border-red-500/20 rounded-2xl active:scale-[0.98] transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer group"
+              className="flex flex-col items-center justify-center p-4 bg-slate-50 border border-slate-100 hover:border-red-500/20 rounded-2xl active:scale-[0.98] transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer group"
             >
-              <div className={`p-2 rounded-xl ${card.color} mb-1.5 group-hover:scale-105 transition-transform`}>
-                <Icon size={20} strokeWidth={2.2} />
+              <div className={`p-2.5 rounded-2xl ${card.color} mb-2 group-hover:scale-105 transition-transform`}>
+                <Icon size={22} strokeWidth={2.2} />
               </div>
-              <span className="text-xs font-semibold text-slate-800 tracking-wide">
+              <span className="text-xs font-bold text-slate-800 tracking-wide">
                 {card.label}
               </span>
             </button>
