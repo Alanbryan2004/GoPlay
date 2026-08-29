@@ -51,14 +51,16 @@ export default function Header() {
         {/* Drawer Panel */}
         <div className="relative flex flex-col w-64 max-w-xs bg-white h-[calc(100vh-4rem)] shadow-2xl border-r border-slate-100 rounded-br-2xl">
           
-          {/* Botão de Toggle Alça/Flutuante - fica na borda direita do painel */}
-          <button
-            onClick={() => setDrawerOpen(!drawerOpen)}
-            className="absolute left-full top-6 ml-3 p-2.5 bg-[#eb3237] hover:bg-red-650 text-white rounded-xl shadow-lg cursor-pointer transition-all duration-300 flex items-center justify-center border border-red-500/10 focus:outline-none"
-            title={drawerOpen ? "Fechar Menu" : "Abrir Menu"}
-          >
-            {drawerOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+          {/* Botão de Toggle Alça/Flutuante - só fica visível quando o drawer está FECHADO */}
+          {!drawerOpen && (
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="absolute left-full top-6 ml-3 p-2.5 bg-[#eb3237] hover:bg-red-650 text-white rounded-xl shadow-lg cursor-pointer transition-all duration-300 flex items-center justify-center border border-red-500/10 focus:outline-none"
+              title="Abrir Menu"
+            >
+              <Menu size={20} />
+            </button>
+          )}
 
           {/* Header: Logo do App */}
           <div className="p-6 border-b border-slate-150 flex items-center justify-center bg-slate-50">
