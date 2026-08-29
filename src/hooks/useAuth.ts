@@ -40,7 +40,7 @@ export function useAuth() {
   const syncDbUser = async (authUser: User) => {
     try {
       const email = authUser.email || '';
-      const nome = authUser.user_metadata?.nome || authUser.email?.split('@')[0] || 'Jogador';
+      const nome = authUser.user_metadata?.nome || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Jogador';
       const foto = authUser.user_metadata?.avatar_url || '';
 
       // Upsert to user table in public schema

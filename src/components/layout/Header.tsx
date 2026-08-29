@@ -71,7 +71,14 @@ export default function Header() {
             <div className="h-8 w-[1px] bg-slate-200 flex-shrink-0" />
 
             {/* Dados do Usuário */}
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+            <button
+              onClick={() => {
+                setDrawerOpen(false);
+                navigate('/profile');
+              }}
+              className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-80 active:scale-95 transition-all cursor-pointer focus:outline-none"
+              title="Meu Perfil"
+            >
               {userAvatar ? (
                 <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover ring-2 ring-red-500/20 flex-shrink-0" />
               ) : (
@@ -83,7 +90,7 @@ export default function Header() {
                 <span className="font-bold text-slate-800 text-[11px] leading-tight line-clamp-1">{userName}</span>
                 <span className="text-[8px] font-semibold text-red-500 uppercase tracking-wider">Jogador</span>
               </div>
-            </div>
+            </button>
           </div>
 
           {/* Navigation links */}
@@ -119,6 +126,14 @@ export default function Header() {
             >
               <Users size={18} className="text-slate-500" />
               <span>Comunidades</span>
+            </Link>
+            <Link 
+              to="/profile" 
+              onClick={() => setDrawerOpen(false)}
+              className="flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-slate-50 rounded-xl font-medium transition-colors"
+            >
+              <User size={18} className="text-slate-500" />
+              <span>Meu Perfil</span>
             </Link>
           </div>
 
