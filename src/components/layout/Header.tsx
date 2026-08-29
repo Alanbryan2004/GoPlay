@@ -62,9 +62,28 @@ export default function Header() {
             </button>
           )}
 
-          {/* Header: Logo do App */}
-          <div className="p-6 border-b border-slate-150 flex items-center justify-center bg-slate-50">
-            <img src="/goplay.png" alt="GoPlay Logo" className="h-12 w-auto object-contain rounded-xl" />
+          {/* Header da Sidebar: Logo + Dados do Usuário */}
+          <div className="p-4 border-b border-slate-150 flex items-center gap-3 bg-slate-50">
+            {/* Logo do App */}
+            <img src="/goplay.png" alt="GoPlay Logo" className="h-10 w-auto object-contain rounded-xl flex-shrink-0" />
+            
+            {/* Divisor vertical sutil */}
+            <div className="h-8 w-[1px] bg-slate-200 flex-shrink-0" />
+
+            {/* Dados do Usuário */}
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              {userAvatar ? (
+                <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover ring-2 ring-red-500/20 flex-shrink-0" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#eb3237] text-white flex items-center justify-center font-bold text-xs ring-2 ring-red-500/20 flex-shrink-0">
+                  <User size={12} />
+                </div>
+              )}
+              <div className="flex flex-col min-w-0">
+                <span className="font-bold text-slate-800 text-[11px] leading-tight line-clamp-1">{userName}</span>
+                <span className="text-[8px] font-semibold text-red-500 uppercase tracking-wider">Jogador</span>
+              </div>
+            </div>
           </div>
 
           {/* Navigation links */}
@@ -103,30 +122,14 @@ export default function Header() {
             </Link>
           </div>
 
-          {/* Bottom section: User Info & Logout button */}
-          <div className="p-4 border-t border-slate-150 bg-slate-50 flex flex-col gap-3">
-            {/* User profile info */}
-            <div className="flex items-center gap-3">
-              {userAvatar ? (
-                <img src={userAvatar} alt={userName} className="w-10 h-10 rounded-full object-cover ring-2 ring-red-500/20" />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-[#eb3237] text-white flex items-center justify-center font-bold text-sm ring-2 ring-red-500/20">
-                  <User size={16} />
-                </div>
-              )}
-              <div className="flex flex-col">
-                <span className="font-bold text-slate-800 text-xs line-clamp-1">{userName}</span>
-                <span className="text-[9px] font-semibold text-red-500 uppercase tracking-wider">Jogador</span>
-              </div>
-            </div>
-
-            {/* Logout button */}
+          {/* Bottom section: Only Logout button */}
+          <div className="p-4 border-t border-slate-150 bg-slate-50">
             <button
               onClick={() => {
                 setDrawerOpen(false);
                 handleLogout();
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 text-red-650 hover:bg-red-55 rounded-xl font-medium transition-colors cursor-pointer text-xs"
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-red-650 hover:bg-red-55 rounded-xl font-medium transition-colors cursor-pointer text-xs"
             >
               <LogOut size={16} />
               <span>Sair</span>
