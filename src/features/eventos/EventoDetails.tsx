@@ -889,10 +889,10 @@ export default function EventoDetails() {
             </button>
             <button
               onClick={handleFinalizarEvento}
-              className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-650 border border-red-200 font-bold rounded-xl active:scale-95 transition-all text-xs mt-2 flex justify-center items-center gap-1.5 cursor-pointer"
+              className="w-full py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold rounded-xl active:scale-95 transition-all text-xs mt-2 flex justify-center items-center gap-1.5 cursor-pointer"
             >
-              <Trash2 size={14} />
-              <span>Finalizar e Excluir Evento</span>
+              <CheckCircle size={14} />
+              <span>Encerrar Evento (Manter Ranking)</span>
             </button>
           </div>
         </div>
