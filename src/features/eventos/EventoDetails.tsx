@@ -17,7 +17,8 @@ import {
   X,
   Star,
   Users,
-  AlertCircle
+  AlertCircle,
+  ArrowLeft
 } from 'lucide-react';
 import {
   sortearTimes,
@@ -498,12 +499,21 @@ export default function EventoDetails() {
   return (
     <div className="p-6 pb-28 w-full max-w-md mx-auto space-y-6">
       {/* Informações Básicas do Evento */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 leading-tight">{evento.descricao}</h1>
-          <p className="text-xs text-slate-450 mt-1">
-            {evento.local} • {dayjs(evento.data).format('DD/MM/YYYY [-] HH:mm')}
-          </p>
+      <div className="flex justify-between items-start gap-2">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 rounded-lg bg-slate-50 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200 cursor-pointer flex-shrink-0"
+            title="Voltar"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 leading-tight">{evento.descricao}</h1>
+            <p className="text-xs text-slate-450 mt-1">
+              {evento.local} • {dayjs(evento.data).format('DD/MM/YYYY [-] HH:mm')}
+            </p>
+          </div>
         </div>
 
         <div className="flex gap-2">
