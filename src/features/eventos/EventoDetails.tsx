@@ -81,9 +81,25 @@ export default function EventoDetails() {
   // Referência para evitar loop infinito de salvamento
   const skipDbUpdate = useRef(false);
 
+  // Autocomplete de usuários
+  const [todasPessoas, setTodasPessoas] = useState<any[]>([]);
+  const [sugestoes, setSugestoes] = useState<any[]>([]);
+
   // Buscar evento inicial
   useEffect(() => {
     fetchEvento();
+    loadUsuarios();
+
+    async function loadUsuarios() {
+      try {
+        const { data, error } = await supabase.from('usuarios').select('id, nome, foto, email');
+        if (data && !error) {
+          setTodasPessoas(data);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
     // Inscrição Supabase Realtime para sincronização multiplayer
     const channel = supabase
@@ -158,7 +174,7 @@ export default function EventoDetails() {
     }
   };
 
-  // Adicionar jogador
+  // Adicionar jogador offline (convidado)
   const handleAddJogador = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoNome.trim()) return;
@@ -188,6 +204,47 @@ export default function EventoDetails() {
 
     setParticipantes(novosParticipantes);
     setNovoNome('');
+    setSugestoes([]);
+    updateDatabase({ participantes: novosParticipantes });
+  };
+
+  // Lógica de digitação e filtragem de cadastrados
+  const handleInputChange = (value: string) => {
+    setNovoNome(value);
+    if (value.trim().length >= 2) {
+      const filtered = todasPessoas.filter((u) => {
+        const matchText = u.nome.toLowerCase().includes(value.toLowerCase());
+        const alreadyInList = participantes.some(
+          (p) => p.nome.toLowerCase() === u.nome.toLowerCase() || p.id === u.id
+        );
+        return matchText && !alreadyInList;
+      });
+      setSugestoes(filtered.slice(0, 5));
+    } else {
+      setSugestoes([]);
+    }
+  };
+
+  // Adicionar jogador a partir do autocomplete (cadastrado)
+  const handleSelectSugestao = (user: any) => {
+    const novoJogador: Participante = {
+      id: user.id, // ID real do usuário no Supabase!
+      nome: user.nome,
+      foto: user.foto || '',
+      checked: true,
+      avaliacao: 3,
+      prioridade: 0,
+      jogos: 0,
+      jogosGanhos: 0,
+    };
+
+    const novosParticipantes = [...participantes, novoJogador].sort((a, b) =>
+      a.nome.localeCompare(b.nome)
+    );
+
+    setParticipantes(novosParticipantes);
+    setNovoNome('');
+    setSugestoes([]);
     updateDatabase({ participantes: novosParticipantes });
   };
 
@@ -704,17 +761,45 @@ export default function EventoDetails() {
       )}
 
       {/* ADICIONAR JOGADOR AO EVENTO */}
-      <form onSubmit={handleAddJogador} className="flex gap-2">
-        <input
-          type="text"
-          placeholder="Nome do jogador..."
-          value={novoNome}
-          onChange={(e) => setNovoNome(e.target.value)}
-          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/30 placeholder-slate-600"
-        />
+      <form onSubmit={handleAddJogador} className="flex gap-2 relative">
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            placeholder="Nome do jogador..."
+            value={novoNome}
+            onChange={(e) => handleInputChange(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/30 placeholder-slate-650"
+          />
+
+          {/* Lista de Sugestões Auto-complete */}
+          {sugestoes.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-150 rounded-xl shadow-xl z-50 overflow-hidden max-h-48 overflow-y-auto">
+              {sugestoes.map((user) => (
+                <button
+                  key={user.id}
+                  type="button"
+                  onClick={() => handleSelectSugestao(user)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0 cursor-pointer"
+                >
+                  {user.foto ? (
+                    <img src={user.foto} alt={user.nome} className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                      {user.nome[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-bold text-slate-800 truncate">{user.nome}</span>
+                    <span className="text-[10px] text-slate-450 truncate">{user.email}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button
           type="submit"
-          className="p-3 bg-red-600 hover:bg-red-500 text-white rounded-xl active:scale-95 transition-all shadow-md"
+          className="p-3 bg-red-600 hover:bg-red-500 text-white rounded-xl active:scale-95 transition-all shadow-md flex-shrink-0 cursor-pointer flex items-center justify-center"
         >
           <UserPlus size={18} />
         </button>
