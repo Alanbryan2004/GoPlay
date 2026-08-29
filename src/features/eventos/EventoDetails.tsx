@@ -62,6 +62,7 @@ export default function EventoDetails() {
   const [showRanking, setShowRanking] = useState(false);
   const [showDrawResult, setShowDrawResult] = useState(false);
   const [drawTeamsResult, setDrawTeamsResult] = useState<Participante[][]>([]);
+  const [showPodium, setShowPodium] = useState(false);
   const [dialog, setDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -475,7 +476,7 @@ export default function EventoDetails() {
           if (error) throw error;
           
           setShowConfig(false);
-          navigate('/'); // Voltar para a Dashboard inicial
+          setShowPodium(true); // Exibe o Pódio antes de ir embora!
         } catch (err: any) {
           setDialog({
             isOpen: true,
@@ -1042,6 +1043,133 @@ export default function EventoDetails() {
                 Iniciar Partida
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Pódio/Ranking Final */}
+      {showPodium && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-6 animate-fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 flex flex-col space-y-4 max-h-[90vh] overflow-y-auto animate-slide-in">
+            {/* Header */}
+            <div className="text-center">
+              <span className="text-2xl">🏆</span>
+              <h2 className="text-lg font-black text-slate-900 uppercase mt-1">Ranking Final</h2>
+              <p className="text-[10px] font-bold text-slate-450 uppercase tracking-widest">{evento?.descricao}</p>
+            </div>
+
+            {/* Render 3D Podium */}
+            {(() => {
+              const ranked = [...participantes].sort((a, b) => {
+                if (b.vitorias !== a.vitorias) return b.vitorias - a.vitorias;
+                return a.derrotas - b.derrotas;
+              });
+              const p1 = ranked[0];
+              const p2 = ranked[1];
+              const p3 = ranked[2];
+              const rest = ranked.slice(3);
+
+              return (
+                <>
+                  <div className="flex items-end justify-center gap-3 pt-6 pb-2 min-h-[190px]">
+                    {/* 2º Lugar (Esquerda) */}
+                    {p2 ? (
+                      <div className="flex flex-col items-center flex-1 min-w-0">
+                        <div className="relative mb-2">
+                          {p2.foto ? (
+                            <img src={p2.foto} alt={p2.nome} className="w-12 h-12 rounded-full object-cover border-2 border-slate-300 ring-2 ring-slate-300/25" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-slate-200 text-slate-650 flex items-center justify-center font-bold text-sm border-2 border-slate-300">
+                              {p2.nome[0]}
+                            </div>
+                          )}
+                          <div className="absolute -top-3 -right-2 bg-slate-300 text-slate-800 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">2</div>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-700 truncate w-full text-center px-1">{p2.nome}</span>
+                        <span className="text-[9px] font-semibold text-slate-500">{p2.vitorias} Vit.</span>
+                        <div className="w-full bg-gradient-to-t from-slate-100 to-slate-50 border-t border-slate-300 h-12 rounded-t-lg mt-2 flex items-center justify-center">
+                          <span className="text-xl">🥈</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1" />
+                    )}
+
+                    {/* 1º Lugar (Centro) */}
+                    {p1 ? (
+                      <div className="flex flex-col items-center flex-1 min-w-0 z-10">
+                        <div className="relative mb-2">
+                          {p1.foto ? (
+                            <img src={p1.foto} alt={p1.nome} className="w-16 h-16 rounded-full object-cover border-4 border-amber-400 ring-4 ring-amber-400/30" />
+                          ) : (
+                            <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-black text-xl border-4 border-amber-400">
+                              {p1.nome[0]}
+                            </div>
+                          )}
+                          <div className="absolute -top-4 -right-1.5 bg-amber-400 text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shadow-md">1</div>
+                        </div>
+                        <span className="text-xs font-black text-slate-950 truncate w-full text-center px-1">{p1.nome}</span>
+                        <span className="text-[10px] font-black text-amber-600">{p1.vitorias} Vit.</span>
+                        <div className="w-full bg-gradient-to-t from-amber-50 to-amber-100/60 border-t-2 border-amber-400 h-16 rounded-t-xl mt-2 flex items-center justify-center shadow-lg shadow-amber-300/10">
+                          <span className="text-2xl">👑</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1" />
+                    )}
+
+                    {/* 3º Lugar (Direita) */}
+                    {p3 ? (
+                      <div className="flex flex-col items-center flex-1 min-w-0">
+                        <div className="relative mb-2">
+                          {p3.foto ? (
+                            <img src={p3.foto} alt={p3.nome} className="w-10 h-10 rounded-full object-cover border-2 border-amber-700 ring-2 ring-amber-700/25" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-900 flex items-center justify-center font-bold text-xs border-2 border-amber-700">
+                              {p3.nome[0]}
+                            </div>
+                          )}
+                          <div className="absolute -top-3 -right-2 bg-amber-700 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">3</div>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-700 truncate w-full text-center px-1">{p3.nome}</span>
+                        <span className="text-[9px] font-semibold text-slate-500">{p3.vitorias} Vit.</span>
+                        <div className="w-full bg-gradient-to-t from-amber-900/10 to-amber-900/5 border-t border-amber-700 h-8 rounded-t-lg mt-2 flex items-center justify-center">
+                          <span className="text-lg">🥉</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1" />
+                    )}
+                  </div>
+
+                  {/* Restante da Tabela */}
+                  {rest.length > 0 && (
+                    <div className="bg-slate-50 rounded-xl p-3 max-h-[160px] overflow-y-auto space-y-1.5 border border-slate-100 w-full">
+                      {rest.map((player, idx) => (
+                        <div key={player.id} className="flex items-center justify-between py-1.5 px-2.5 bg-white rounded-lg border border-slate-100 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-400">#{idx + 4}</span>
+                            <span className="font-bold text-slate-700">{player.nome}</span>
+                          </div>
+                          <span className="font-extrabold text-slate-500 text-[10px]">{player.vitorias} vitórias</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* Botão de Fechar e Voltar para Home */}
+            <button
+              onClick={() => {
+                setShowPodium(false);
+                navigate('/');
+              }}
+              className="w-full py-3 bg-[#eb3237] hover:bg-red-650 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center"
+            >
+              Confirmar e Ir para a Home
+            </button>
           </div>
         </div>
       )}
