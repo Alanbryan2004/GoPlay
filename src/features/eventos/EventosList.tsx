@@ -5,6 +5,7 @@ import type { Evento } from '../../types';
 import { Plus, Trash2, Calendar, MapPin, Search, ChevronRight } from 'lucide-react';
 import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'framer-motion';
+import Dialog from '../../components/common/Dialog';
 
 export default function EventosList() {
   const navigate = useNavigate();
@@ -15,6 +16,20 @@ export default function EventosList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'alert' | 'confirm';
+    onConfirm: () => void;
+    onCancel?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'alert',
+    onConfirm: () => {},
+  });
 
   useEffect(() => {
     fetchEventos();
@@ -51,7 +66,13 @@ export default function EventosList() {
       if (!error) {
         setEventos((prev) => prev.filter((ev) => ev.id !== id));
       } else {
-        alert('Erro ao excluir evento: ' + error.message);
+        setDialog({
+          isOpen: true,
+          title: 'Erro',
+          message: 'Erro ao excluir evento: ' + error.message,
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
       }
     } catch (err) {
       console.error(err);
@@ -135,11 +156,18 @@ export default function EventosList() {
                   <button
                     disabled={deletingId === evento.id}
                     onClick={(e) => {
-                      if (confirm('Tem certeza que deseja excluir este evento?')) {
-                        handleDelete(evento.id, e);
-                      } else {
-                        e.stopPropagation();
-                      }
+                      e.stopPropagation();
+                      setDialog({
+                        isOpen: true,
+                        title: 'Excluir Evento',
+                        message: 'Tem certeza que deseja excluir permanentemente este evento?',
+                        type: 'confirm',
+                        onConfirm: () => {
+                          setDialog((prev) => ({ ...prev, isOpen: false }));
+                          handleDelete(evento.id, e);
+                        },
+                        onCancel: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+                      });
                     }}
                     className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-50/80 rounded-xl transition-all"
                     title="Excluir evento"
@@ -157,6 +185,7 @@ export default function EventosList() {
           </AnimatePresence>
         </div>
       )}
+      <Dialog {...dialog} />
     </div>
   );
 }

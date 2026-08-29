@@ -20,6 +20,7 @@ import {
   AlertCircle,
   ArrowLeft
 } from 'lucide-react';
+import Dialog from '../../components/common/Dialog';
 import {
   sortearTimes,
   construirFilaPrioridades,
@@ -61,6 +62,20 @@ export default function EventoDetails() {
   const [showRanking, setShowRanking] = useState(false);
   const [showDrawResult, setShowDrawResult] = useState(false);
   const [drawTeamsResult, setDrawTeamsResult] = useState<Participante[][]>([]);
+  const [dialog, setDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'alert' | 'confirm';
+    onConfirm: () => void;
+    onCancel?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'alert',
+    onConfirm: () => {},
+  });
 
   // Referência para evitar loop infinito de salvamento
   const skipDbUpdate = useRef(false);
@@ -213,7 +228,13 @@ export default function EventoDetails() {
   const handleSortearClick = () => {
     const presentes = participantes.filter((p) => p.checked);
     if (presentes.length < config.numberOfPlayers) {
-      alert(`Jogadores presentes insuficientes. Mínimo de ${config.numberOfPlayers} jogadores necessários.`);
+      setDialog({
+        isOpen: true,
+        title: 'Aviso',
+        message: `Jogadores presentes insuficientes. Mínimo de ${config.numberOfPlayers} jogadores necessários.`,
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
       return;
     }
 
@@ -437,25 +458,36 @@ export default function EventoDetails() {
   };
 
   // Finalizar e arquivar o evento mantendo estatísticas
-  const handleFinalizarEvento = async () => {
-    const confirmar = window.confirm(
-      'Deseja realmente finalizar este evento? Ele será marcado como concluído e os dados de classificação (Ranking) serão consolidados permanentemente.'
-    );
-    if (!confirmar) return;
-
-    try {
-      const updatedConfig = { ...config, finalizado: true };
-      const { error } = await supabase
-        .from('eventos')
-        .update({ configuracao: updatedConfig })
-        .eq('id', id);
-      if (error) throw error;
-      
-      setShowConfig(false);
-      navigate('/'); // Voltar para a Dashboard inicial
-    } catch (err: any) {
-      alert('Erro ao finalizar evento: ' + err.message);
-    }
+  const handleFinalizarEvento = () => {
+    setDialog({
+      isOpen: true,
+      title: 'Encerrar Evento',
+      message: 'Deseja realmente finalizar este evento? Ele será marcado como concluído e os dados de classificação (Ranking) serão consolidados permanentemente.',
+      type: 'confirm',
+      onConfirm: async () => {
+        setDialog((prev) => ({ ...prev, isOpen: false }));
+        try {
+          const updatedConfig = { ...config, finalizado: true };
+          const { error } = await supabase
+            .from('eventos')
+            .update({ configuracao: updatedConfig })
+            .eq('id', id);
+          if (error) throw error;
+          
+          setShowConfig(false);
+          navigate('/'); // Voltar para a Dashboard inicial
+        } catch (err: any) {
+          setDialog({
+            isOpen: true,
+            title: 'Erro',
+            message: 'Erro ao finalizar evento: ' + err.message,
+            type: 'alert',
+            onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+          });
+        }
+      },
+      onCancel: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+    });
   };
 
   // Obter jogadores na fila (Presentes que não estão no Time 1 nem no Time 2)
@@ -1013,6 +1045,7 @@ export default function EventoDetails() {
           </div>
         </div>
       )}
+      <Dialog {...dialog} />
     </div>
   );
 }
