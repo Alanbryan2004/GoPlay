@@ -892,7 +892,7 @@ export default function EventoDetails() {
               className="w-full py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold rounded-xl active:scale-95 transition-all text-xs mt-2 flex justify-center items-center gap-1.5 cursor-pointer"
             >
               <CheckCircle size={14} />
-              <span>Encerrar Evento (Manter Ranking)</span>
+              <span>Encerrar Evento</span>
             </button>
           </div>
         </div>
