@@ -1,0 +1,275 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
+import type { Modalidade } from '../../types';
+import { Calendar, MapPin, AlignLeft, Activity, ArrowLeft } from 'lucide-react';
+import dayjs from 'dayjs';
+import timezone from 'dayjs/plugin/timezone';
+import utc from 'dayjs/plugin/utc';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+export default function NovoEvento() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const grupoId = searchParams.get('grupo_id');
+
+  const [descricao, setDescricao] = useState('');
+  const [local, setLocal] = useState('');
+  const [modalidadeId, setModalidadeId] = useState('');
+  const [data, setData] = useState('');
+  const [hora, setHora] = useState('');
+  const [modalidades, setModalidades] = useState<Modalidade[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingModalidades, setLoadingModalidades] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchModalidades();
+  }, []);
+
+  const fetchModalidades = async () => {
+    try {
+      const { data: dbModalidades, error } = await supabase
+        .from('modalidades')
+        .select('*');
+
+      if (!error && dbModalidades && dbModalidades.length > 0) {
+        setModalidades(dbModalidades as Modalidade[]);
+        setModalidadeId(dbModalidades[0].id);
+      } else {
+        // Fallback: Se a tabela de modalidades estiver vazia, vamos semear as básicas!
+        const defaultNames = ['Futebol', 'Vôlei', 'Basquete', 'Beach Tennis', 'Tênis de Mesa', 'Futevôlei'];
+        const seedModalidades = defaultNames.map((nome) => ({ nome }));
+        
+        const { data: inserted, error: insertError } = await supabase
+          .from('modalidades')
+          .insert(seedModalidades)
+          .select();
+        
+        if (!insertError && inserted) {
+          setModalidades(inserted as Modalidade[]);
+          setModalidadeId(inserted[0].id);
+        } else {
+          console.error('Error seeding/fetching modalities:', insertError || error);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingModalidades(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!descricao || !local || !modalidadeId || !data || !hora) {
+      setErro('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+    setLoading(true);
+    setErro(null);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setErro('Você precisa estar autenticado para criar um evento.');
+        setLoading(false);
+        return;
+      }
+
+      // Query the user's uuid from the public table (or direct supabase user.id if mapped)
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('email', user.email)
+        .single();
+
+      const resolvedUserId = userData?.id || user.id;
+
+      // Combinar data e hora no fuso horário do Brasil e converter para UTC
+      const fusoBrasil = 'America/Sao_Paulo';
+      const dataHoraStr = `${data}T${hora}:00`;
+      const utcDate = dayjs.tz(dataHoraStr, fusoBrasil).utc().format();
+
+      // Configuração padrão do sorteio
+      const defaultConfig = {
+        numberOfTeams: 2,
+        numberOfPlayers: 6,
+        useRating: false,
+        maxNumberOfVictories: 3,
+        actionAfterVictories: 1, // Mesclar por padrão
+      };
+
+      const newEvento = {
+        usuario_id: resolvedUserId,
+        grupo_id: grupoId || null,
+        descricao: descricao.trim(),
+        local: local.trim(),
+        modalidade_id: modalidadeId,
+        data: utcDate,
+        participantes: [],
+        configuracao: defaultConfig,
+        time1: [],
+        time2: [],
+        vitorias_time1: 0,
+        vitorias_time2: 0,
+      };
+
+      const { error } = await supabase.from('eventos').insert(newEvento);
+
+      if (!error) {
+        navigate(grupoId ? `/eventos?grupo_id=${grupoId}` : '/eventos');
+      } else {
+        setErro(error.message);
+      }
+    } catch (err: any) {
+      setErro(err.message || 'Ocorreu um erro ao salvar o evento.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-6 pb-24 w-full max-w-md mx-auto">
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 rounded-lg bg-slate-50 hover:bg-slate-200 text-slate-700 transition-colors"
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <h1 className="text-2xl font-extrabold text-slate-900">Novo Evento</h1>
+      </div>
+
+      <div className="glass p-6 rounded-2xl shadow-xl">
+        {erro && (
+          <div className="flex items-center gap-2 mb-4 p-3 bg-red-950/40 border border-red-500/30 text-red-700 rounded-xl text-sm">
+            <span>{erro}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              Descrição / Nome da Partida
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+                <AlignLeft size={18} />
+              </span>
+              <input
+                type="text"
+                required
+                value={descricao}
+                onChange={(e) => setDescricao(e.target.value)}
+                placeholder="Ex: Pelada dos Amigos"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-11 pr-4 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              Local
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+                <MapPin size={18} />
+              </span>
+              <input
+                type="text"
+                required
+                value={local}
+                onChange={(e) => setLocal(e.target.value)}
+                placeholder="Ex: Arena Soccer Beach"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-11 pr-4 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              Modalidade
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+                <Activity size={18} />
+              </span>
+              <select
+                disabled={loadingModalidades}
+                value={modalidadeId}
+                onChange={(e) => setModalidadeId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-11 pr-4 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all text-sm appearance-none"
+              >
+                {loadingModalidades ? (
+                  <option>Carregando modalidades...</option>
+                ) : (
+                  modalidades.map((m) => (
+                    <option key={m.id} value={m.id} className="bg-slate-50 text-slate-900">
+                      {m.nome}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                Data
+              </label>
+              <div className="relative">
+                <input
+                  type="date"
+                  required
+                  value={data}
+                  onChange={(e) => setData(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                Hora
+              </label>
+              <div className="relative">
+                <input
+                  type="time"
+                  required
+                  value={hora}
+                  onChange={(e) => setHora(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-4 mt-6">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="flex-1 py-3 bg-slate-50 hover:bg-slate-200 text-slate-600 border border-slate-200 font-bold rounded-xl transition-all text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 py-3 bg-gradient-to-r from-[#eb3237] to-red-650 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-xl shadow-lg shadow-[#eb3237]/20 active:scale-95 transition-all text-sm flex justify-center items-center"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                'Criar'
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
