@@ -44,12 +44,12 @@ export default function Header() {
     <>
       {/* Container principal do Drawer (Sidebar) */}
       <div 
-        className={`fixed inset-y-0 left-0 z-50 flex transition-transform duration-300 ease-out transform ${
+        className={`fixed top-0 bottom-16 left-0 z-50 flex transition-transform duration-300 ease-out transform ${
           drawerOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Drawer Panel */}
-        <div className="relative flex flex-col w-64 max-w-xs bg-white h-[calc(100vh-4rem)] shadow-2xl border-r border-slate-100 rounded-br-2xl">
+        <div className="relative flex flex-col w-64 max-w-xs bg-white h-full shadow-2xl border-r border-slate-100 rounded-br-2xl">
           
           {/* Botão de Toggle Alça/Flutuante - só fica visível quando o drawer está FECHADO */}
           {!drawerOpen && (
