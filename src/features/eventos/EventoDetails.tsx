@@ -826,27 +826,60 @@ export default function EventoDetails() {
           <p className="text-center text-slate-600 text-sm py-4">Nenhum jogador na lista. Adicione acima!</p>
         ) : (
           <div className="space-y-3 max-h-72 overflow-y-auto no-scrollbar pr-1">
-            {participantes.map((p, index) => (
-              <div
-                key={p.id}
-                className={`flex justify-between items-center p-3 rounded-xl transition-all ${
-                  p.checked ? 'bg-slate-50/80 border border-slate-200' : 'bg-slate-100/40 border border-slate-950 opacity-40'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={p.checked}
-                    onChange={() => togglePresenca(index)}
-                    className="w-4 h-4 rounded bg-slate-50 border-slate-200 text-red-600 focus:ring-red-500"
-                  />
-                  <div>
-                    <span className="text-sm font-bold text-slate-800 block leading-tight">{p.nome}</span>
-                    <span className="text-[10px] text-slate-500">
-                      Jogos: {p.jogos || 0} • Prio: {p.prioridade || 0}
-                    </span>
+            {participantes.map((p, index) => {
+              const isCadastrado = todasPessoas.some((u) => u.id === p.id);
+              return (
+                <div
+                  key={p.id}
+                  className={`flex justify-between items-center p-3 rounded-xl transition-all ${
+                    p.checked ? 'bg-slate-50/80 border border-slate-200 shadow-xs' : 'bg-slate-100/40 border border-slate-150 opacity-40'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={p.checked}
+                      onChange={() => togglePresenca(index)}
+                      className="w-4 h-4 rounded bg-slate-50 border-slate-200 text-red-600 focus:ring-red-500 cursor-pointer flex-shrink-0"
+                    />
+
+                    {/* Avatar do Jogador */}
+                    {p.foto ? (
+                      <img 
+                        src={p.foto} 
+                        alt={p.nome} 
+                        className="w-8 h-8 rounded-full object-cover ring-2 ring-red-500/10 flex-shrink-0" 
+                      />
+                    ) : isCadastrado ? (
+                      <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs ring-2 ring-slate-800/10 flex-shrink-0">
+                        {p.nome.charAt(0).toUpperCase()}
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-450 border border-slate-200 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                        {p.nome.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+
+                    {/* Nome e Info */}
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-bold text-slate-850 truncate">{p.nome}</span>
+                        {isCadastrado && (
+                          <span 
+                            className="inline-flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-full p-0.5" 
+                            title="Jogador Cadastrado"
+                          >
+                            <svg className="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24">
+                              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                            </svg>
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[9px] text-slate-450 font-medium">
+                        Jogos: {p.jogos || 0} • Prio: {p.prioridade || 0}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
                 <div className="flex items-center gap-3">
                   {config.useRating && (
@@ -873,7 +906,8 @@ export default function EventoDetails() {
                   </button>
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         )}
 
