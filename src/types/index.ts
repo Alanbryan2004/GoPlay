@@ -68,6 +68,9 @@ export interface Participante {
   prioridade: number;
   jogosGanhos?: number;
   jogos?: number;
+  foto?: string;
+  vitorias?: number;
+  derrotas?: number;
 }
 
 export interface Evento {

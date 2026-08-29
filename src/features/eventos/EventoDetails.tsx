@@ -1146,8 +1146,12 @@ export default function EventoDetails() {
             {/* Render 3D Podium */}
             {(() => {
               const ranked = [...participantes].sort((a, b) => {
-                if (b.vitorias !== a.vitorias) return b.vitorias - a.vitorias;
-                return a.derrotas - b.derrotas;
+                const vA = a.vitorias || 0;
+                const vB = b.vitorias || 0;
+                const dA = a.derrotas || 0;
+                const dB = b.derrotas || 0;
+                if (vB !== vA) return vB - vA;
+                return dA - dB;
               });
               const p1 = ranked[0];
               const p2 = ranked[1];
