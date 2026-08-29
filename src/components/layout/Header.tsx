@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { User, LogOut, Menu, Users, Calendar, X } from 'lucide-react';
+import { User, LogOut, Menu, Users, Calendar, X, Home as HomeIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useState, useEffect } from 'react';
 
@@ -93,8 +93,8 @@ export default function Header() {
               onClick={() => setDrawerOpen(false)}
               className="flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-slate-50 rounded-xl font-medium transition-colors"
             >
-              <Calendar size={18} className="text-slate-500" />
-              <span>Início (Dashboard)</span>
+              <HomeIcon size={18} className="text-slate-500" />
+              <span>Home</span>
             </Link>
             <Link 
               to="/eventos" 
