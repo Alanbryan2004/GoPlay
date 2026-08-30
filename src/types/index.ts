@@ -17,6 +17,7 @@ export interface Grupo {
   id: string;
   nome: string;
   publico: boolean;
+  foto?: string;
   quantidade_participantes?: number;
   created_at?: string;
 }
@@ -26,6 +27,7 @@ export interface GrupoUsuario {
   grupo_id: string;
   usuario_id: string;
   tipo_perfil: 'A' | 'M' | 'P'; // A = Admin, M = Moderator, P = Participant
+  status?: 'pendente' | 'aprovado';
   nome?: string;
   email?: string;
   foto?: string;
