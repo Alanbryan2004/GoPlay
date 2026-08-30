@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import html2canvas from 'html2canvas-pro';
 import { supabase } from '../../lib/supabase';
 import type { Evento, Participante, EventoConfig } from '../../types';
 import { ActionAfterVictories } from '../../types';
@@ -911,6 +910,7 @@ export default function EventoDetails() {
 
     try {
       // 1. Renderizar o elemento HTML em canvas usando html2canvas
+      const html2canvas = (await import('html2canvas-pro')).default;
       const canvas = await html2canvas(el, {
         useCORS: true,
         allowTaint: true,
