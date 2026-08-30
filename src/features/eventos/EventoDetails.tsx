@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { supabase } from '../../lib/supabase';
 import type { Evento, Participante, EventoConfig } from '../../types';
 import { ActionAfterVictories } from '../../types';
