@@ -27,7 +27,7 @@ export interface GrupoUsuario {
   grupo_id: string;
   usuario_id: string;
   tipo_perfil: 'A' | 'M' | 'P'; // A = Admin, M = Moderator, P = Participant
-  status?: 'pendente' | 'aprovado';
+  status?: 'pendente' | 'aprovado' | 'convidado';
   nome?: string;
   email?: string;
   foto?: string;

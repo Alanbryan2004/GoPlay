@@ -104,7 +104,6 @@ export default function GruposList() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Limitar tamanho do Base64 a ~1MB para evitar sobrecarga
       if (file.size > 1.5 * 1024 * 1024) {
         setDialog({
           isOpen: true,
@@ -210,7 +209,7 @@ export default function GruposList() {
   const fetchMembersOfSelectedGroup = async (grupoId: string) => {
     setLoadingMembros(true);
     try {
-      // 1. Buscar membros atuais do grupo (aprovados e pendentes)
+      // 1. Buscar membros do grupo (aprovados, pendentes e convidados)
       const { data: dbMembros, error: membrosError } = await supabase
         .from('membros_grupo')
         .select(`
@@ -267,7 +266,7 @@ export default function GruposList() {
             .in('id', amigoIds);
 
           if (dbUsers) {
-            // Filtrar amigos que já NÃO sejam membros do grupo (ativos ou pendentes)
+            // Filtrar amigos que já NÃO sejam membros do grupo (ativos, pendentes ou convidados)
             const filtrados = (dbUsers as Usuario[]).filter(
               (amigo) => !parsedMembros.some((m) => m.usuario_id === amigo.id)
             );
@@ -293,7 +292,7 @@ export default function GruposList() {
     }
   };
 
-  // Adicionar Membro ao Grupo (Convite direto de amigo pelo Admin)
+  // Enviar convite a amigo pelo Admin (status = 'convidado')
   const handleAddMembro = async (friend: Usuario) => {
     if (!selectedGrupo) return;
     try {
@@ -303,7 +302,7 @@ export default function GruposList() {
           grupo_id: selectedGrupo.id,
           usuario_id: friend.id,
           tipo_perfil: 'P',
-          status: 'aprovado'
+          status: 'convidado' // Alterado para convidar em vez de inserir direto
         })
         .select(`
           id,
@@ -325,25 +324,29 @@ export default function GruposList() {
           id: data.id,
           usuario_id: data.usuario_id,
           tipo_perfil: data.tipo_perfil || 'P',
-          status: data.status || 'aprovado',
+          status: data.status || 'convidado',
           usuario: userObj as Usuario,
         };
         setMembros((prev) => [...prev, novoMembro]);
         setAmigosParaAdicionar((prev) => prev.filter((a) => a.id !== friend.id));
       } else {
-        console.error('Erro ao adicionar membro:', error);
+        console.error('Erro ao enviar convite:', error);
       }
     } catch (e) {
       console.error(e);
     }
   };
 
-  // Remover Membro do Grupo (Por Admin)
+  // Remover Membro ou Cancelar Convite (Por Admin)
   const handleRemoveMembro = async (membroId: string, usuario: Usuario) => {
+    const memObj = membros.find(m => m.id === membroId);
+    const isInvite = memObj?.status === 'convidado';
     setDialog({
       isOpen: true,
-      title: 'Remover Integrante',
-      message: `Deseja realmente remover ${usuario.nome} do grupo?`,
+      title: isInvite ? 'Cancelar Convite' : 'Remover Integrante',
+      message: isInvite 
+        ? `Deseja realmente cancelar o convite enviado para ${usuario.nome}?` 
+        : `Deseja realmente remover ${usuario.nome} do grupo?`,
       type: 'confirm',
       onConfirm: async () => {
         setDialog((prev) => ({ ...prev, isOpen: false }));
@@ -357,7 +360,7 @@ export default function GruposList() {
             setMembros((prev) => prev.filter((m) => m.id !== membroId));
             setAmigosParaAdicionar((prev) => [...prev, usuario]);
           } else {
-            console.error('Erro ao deletar:', error);
+            console.error('Erro ao deletar membro/convite:', error);
           }
         } catch (e) {
           console.error(e);
@@ -367,10 +370,9 @@ export default function GruposList() {
     });
   };
 
-  // Entrar em um Grupo Público
+  // Entrar em um/ Aceitar Entrada em Grupo Público
   const handleJoinPublicGroup = async (grupoId: string) => {
     try {
-      // Verifica se já existe algum administrador ativo no grupo
       const { data: admins } = await supabase
         .from('membros_grupo')
         .select('id')
@@ -412,6 +414,58 @@ export default function GruposList() {
         type: 'alert',
         onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
       });
+    }
+  };
+
+  // Aceitar Convite Recebido (Membro)
+  const handleAcceptInvite = async (grupoId: string) => {
+    try {
+      const { error } = await supabase
+        .from('membros_grupo')
+        .update({ status: 'aprovado' })
+        .eq('grupo_id', grupoId)
+        .eq('usuario_id', currentUserId);
+
+      if (!error) {
+        await fetchGruposAndMemberships();
+      } else {
+        console.error('Erro ao aceitar convite:', error);
+        setDialog({
+          isOpen: true,
+          title: 'Erro ao Aceitar Convite',
+          message: error.message || 'Erro inesperado.',
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+      }
+    } catch (e: any) {
+      console.error(e);
+    }
+  };
+
+  // Recusar Convite Recebido (Membro)
+  const handleDeclineInvite = async (grupoId: string) => {
+    try {
+      const { error } = await supabase
+        .from('membros_grupo')
+        .delete()
+        .eq('grupo_id', grupoId)
+        .eq('usuario_id', currentUserId);
+
+      if (!error) {
+        await fetchGruposAndMemberships();
+      } else {
+        console.error('Erro ao recusar convite:', error);
+        setDialog({
+          isOpen: true,
+          title: 'Erro ao Recusar Convite',
+          message: error.message || 'Erro inesperado.',
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+      }
+    } catch (e: any) {
+      console.error(e);
     }
   };
 
@@ -671,6 +725,10 @@ export default function GruposList() {
     myMemberships.some((m) => m.grupo_id === g.id && m.status === 'aprovado')
   );
 
+  const convitesRecebidos = filteredAllGrupos.filter((g) =>
+    myMemberships.some((m) => m.grupo_id === g.id && m.status === 'convidado')
+  );
+
   const solicitacoesEnviadas = filteredAllGrupos.filter((g) =>
     myMemberships.some((m) => m.grupo_id === g.id && m.status === 'pendente')
   );
@@ -687,6 +745,7 @@ export default function GruposList() {
 
   const membrosAtivos = membros.filter((m) => m.status === 'aprovado');
   const membrosPendentes = membros.filter((m) => m.status === 'pendente');
+  const membrosConvidados = membros.filter((m) => m.status === 'convidado');
 
   return (
     <div className="px-4 py-3 pb-24 w-full max-w-md mx-auto min-h-[calc(100vh-8rem)]">
@@ -799,7 +858,7 @@ export default function GruposList() {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-650 rounded-xl text-sm font-bold cursor-pointer text-center"
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-655 rounded-xl text-sm font-bold cursor-pointer text-center"
                 >
                   Cancelar
                 </button>
@@ -822,6 +881,59 @@ export default function GruposList() {
         </div>
       ) : (
         <div className="space-y-6 text-left">
+          
+          {/* 0. CONVITES RECEBIDOS */}
+          {convitesRecebidos.length > 0 && (
+            <div className="space-y-3 mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <h2 className="text-xs font-black text-[#eb3237] uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#eb3237]" />
+                  Convites Recebidos
+                </h2>
+                <span className="bg-red-50 text-[#eb3237] text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {convitesRecebidos.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {convitesRecebidos.map((grupo) => (
+                  <div
+                    key={grupo.id}
+                    className="bg-red-50/10 p-4 rounded-2xl border border-red-200/40 flex items-center justify-between shadow-xs animate-fade-in"
+                  >
+                    <div className="flex items-center gap-3">
+                      {grupo.foto ? (
+                        <img src={grupo.foto} alt={grupo.nome} className="w-9 h-9 rounded-xl object-cover shrink-0 border border-red-100" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-xl bg-red-600/10 text-red-500 flex items-center justify-center shrink-0">
+                          <Users size={18} />
+                        </div>
+                      )}
+                      <div>
+                        <h3 className="font-extrabold text-slate-850 text-sm leading-tight">{grupo.nome}</h3>
+                        <p className="text-[10px] text-slate-450 mt-0.5">Você foi convidado para o grupo</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        onClick={() => handleAcceptInvite(grupo.id)}
+                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl cursor-pointer transition-all shadow-xs"
+                      >
+                        Aceitar
+                      </button>
+                      <button
+                        onClick={() => handleDeclineInvite(grupo.id)}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-all border border-slate-200"
+                      >
+                        Recusar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 1. MEUS GRUPOS */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-2">
@@ -929,7 +1041,7 @@ export default function GruposList() {
             </div>
             {gruposDisponiveis.length === 0 ? (
               <div className="text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-150">
-                <p className="text-slate-550 text-xs font-medium">Nenhum outro grupo disponível no momento.</p>
+                <p className="text-slate-555 text-xs font-medium">Nenhum outro grupo disponível no momento.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3">
@@ -1049,7 +1161,7 @@ export default function GruposList() {
                       className={`py-2 px-3 rounded-xl border text-[10px] font-bold transition-all cursor-pointer text-center ${
                         editGroupPublico
                           ? 'bg-red-50 border-red-500 text-red-600'
-                          : 'bg-white border-slate-200 text-slate-650 hover:bg-slate-50'
+                          : 'bg-white border-slate-200 text-slate-655 hover:bg-slate-50'
                       }`}
                     >
                       Público
@@ -1060,7 +1172,7 @@ export default function GruposList() {
                       className={`py-2 px-3 rounded-xl border text-[10px] font-bold transition-all cursor-pointer text-center ${
                         !editGroupPublico
                           ? 'bg-red-50 border-red-500 text-red-600'
-                          : 'bg-white border-slate-200 text-slate-650 hover:bg-slate-50'
+                          : 'bg-white border-slate-200 text-slate-655 hover:bg-slate-50'
                       }`}
                     >
                       Privado
@@ -1143,7 +1255,7 @@ export default function GruposList() {
             ) : (
               <div className="flex-1 overflow-y-auto space-y-4 pr-1 no-scrollbar">
                 
-                {/* 1. SOLICITAÇÕES PENDENTES */}
+                {/* 1. SOLICITAÇÕES PENDENTES (Aprovador/Admin libera entrada solicitada por membros) */}
                 {isAdmin && membrosPendentes.length > 0 && (
                   <div className="bg-amber-50/40 p-3 rounded-2xl border border-amber-100 space-y-2">
                     <h3 className="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
@@ -1180,6 +1292,42 @@ export default function GruposList() {
                               Recusar
                             </button>
                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 1.5. CONVITES ENVIADOS (Aguardando aceitação do amigo convidado) */}
+                {isAdmin && membrosConvidados.length > 0 && (
+                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+                    <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                      Convites Enviados ({membrosConvidados.length})
+                    </h3>
+                    <div className="space-y-2 max-h-36 overflow-y-auto no-scrollbar">
+                      {membrosConvidados.map((m) => (
+                        <div key={m.id} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-150">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {m.usuario.foto ? (
+                              <img src={m.usuario.foto} alt={m.usuario.nome} className="w-7 h-7 rounded-full object-cover" />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[10px]">
+                                {m.usuario.nome.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-850 truncate leading-tight">{m.usuario.nome}</p>
+                              <p className="text-[9px] text-slate-450 truncate">Aguardando aceitação</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleRemoveMembro(m.id, m.usuario)}
+                            className="p-1.5 hover:bg-red-50 hover:text-red-650 rounded-lg text-slate-500 transition-colors cursor-pointer"
+                            title="Cancelar Convite"
+                          >
+                            <X size={14} />
+                          </button>
                         </div>
                       ))}
                     </div>
