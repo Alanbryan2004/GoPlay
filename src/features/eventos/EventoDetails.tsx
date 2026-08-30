@@ -698,10 +698,10 @@ export default function EventoDetails() {
           let updatedParticipantes = [...participantes];
           if (evento?.grupo_id && evento?.modalidade_id) {
             const ranked = [...participantes].sort((a, b) => {
-              const vA = a.vitorias || 0;
-              const vB = b.vitorias || 0;
-              const dA = a.derrotas || 0;
-              const dB = b.derrotas || 0;
+              const vA = a.jogosGanhos || 0;
+              const vB = b.jogosGanhos || 0;
+              const dA = (a.jogos || 0) - vA;
+              const dB = (b.jogos || 0) - vB;
               if (vB !== vA) return vB - vA;
               return dA - dB;
             });
@@ -1467,10 +1467,10 @@ export default function EventoDetails() {
             {/* Render 3D Podium */}
             {(() => {
               const ranked = [...participantes].sort((a, b) => {
-                const vA = a.vitorias || 0;
-                const vB = b.vitorias || 0;
-                const dA = a.derrotas || 0;
-                const dB = b.derrotas || 0;
+                const vA = a.jogosGanhos || 0;
+                const vB = b.jogosGanhos || 0;
+                const dA = (a.jogos || 0) - vA;
+                const dB = (b.jogos || 0) - vB;
                 if (vB !== vA) return vB - vA;
                 return dA - dB;
               });
@@ -1496,7 +1496,7 @@ export default function EventoDetails() {
                           <div className="absolute -top-3 -right-2 bg-slate-300 text-slate-800 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">2</div>
                         </div>
                         <span className="text-[10px] font-bold text-slate-700 truncate w-full text-center px-1">{p2.nome}</span>
-                        <span className="text-[9px] font-semibold text-slate-500">{p2.vitorias} Vit.</span>
+                        <span className="text-[9px] font-semibold text-slate-500">{p2.jogosGanhos || 0} Vit.</span>
                         <div className="w-full bg-gradient-to-t from-slate-100 to-slate-50 border-t border-slate-300 h-12 rounded-t-lg mt-2 flex items-center justify-center">
                           <span className="text-xl">🥈</span>
                         </div>
@@ -1519,7 +1519,7 @@ export default function EventoDetails() {
                           <div className="absolute -top-4 -right-1.5 bg-amber-400 text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shadow-md">1</div>
                         </div>
                         <span className="text-xs font-black text-slate-950 truncate w-full text-center px-1">{p1.nome}</span>
-                        <span className="text-[10px] font-black text-amber-600">{p1.vitorias} Vit.</span>
+                        <span className="text-[10px] font-black text-amber-600">{p1.jogosGanhos || 0} Vit.</span>
                         <div className="w-full bg-gradient-to-t from-amber-50 to-amber-100/60 border-t-2 border-amber-400 h-16 rounded-t-xl mt-2 flex items-center justify-center shadow-lg shadow-amber-300/10">
                           <span className="text-2xl">👑</span>
                         </div>
@@ -1542,7 +1542,7 @@ export default function EventoDetails() {
                           <div className="absolute -top-3 -right-2 bg-amber-700 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">3</div>
                         </div>
                         <span className="text-[10px] font-bold text-slate-700 truncate w-full text-center px-1">{p3.nome}</span>
-                        <span className="text-[9px] font-semibold text-slate-500">{p3.vitorias} Vit.</span>
+                        <span className="text-[9px] font-semibold text-slate-500">{p3.jogosGanhos || 0} Vit.</span>
                         <div className="w-full bg-gradient-to-t from-amber-900/10 to-amber-900/5 border-t border-amber-700 h-8 rounded-t-lg mt-2 flex items-center justify-center">
                           <span className="text-lg">🥉</span>
                         </div>
@@ -1561,7 +1561,7 @@ export default function EventoDetails() {
                             <span className="font-bold text-slate-400">#{idx + 4}</span>
                             <span className="font-bold text-slate-700">{player.nome}</span>
                           </div>
-                          <span className="font-extrabold text-slate-500 text-[10px]">{player.vitorias} vitórias</span>
+                          <span className="font-extrabold text-slate-500 text-[10px]">{player.jogosGanhos || 0} vitórias</span>
                         </div>
                       ))}
                     </div>

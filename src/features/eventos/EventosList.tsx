@@ -53,10 +53,10 @@ export default function EventosList() {
   const autoFinalizarSingleEvent = async (evento: Evento, registeredUserIds: Set<string>) => {
     try {
       const ranked = [...(evento.participantes || [])].sort((a, b) => {
-        const vA = a.vitorias || 0;
-        const vB = b.vitorias || 0;
-        const dA = a.derrotas || 0;
-        const dB = b.derrotas || 0;
+        const vA = a.jogosGanhos || 0;
+        const vB = b.jogosGanhos || 0;
+        const dA = (a.jogos || 0) - vA;
+        const dB = (b.jogos || 0) - vB;
         if (vB !== vA) return vB - vA;
         return dA - dB;
       });
