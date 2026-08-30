@@ -89,6 +89,16 @@ export default function EventoDetails() {
   // Referência para evitar loop infinito de salvamento
   const skipDbUpdate = useRef(false);
 
+  // Toast de atualização remota
+  const [remoteUpdateToast, setRemoteUpdateToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showRemoteToast = (msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setRemoteUpdateToast(msg);
+    toastTimerRef.current = setTimeout(() => setRemoteUpdateToast(null), 3500);
+  };
+
   // Autocomplete de usuários
   const [todasPessoas, setTodasPessoas] = useState<any[]>([]);
   const [sugestoes, setSugestoes] = useState<any[]>([]);
@@ -183,39 +193,53 @@ export default function EventoDetails() {
           filter: `id=eq.${id}`,
         },
         async (payload: any) => {
-          if (payload.new && !skipDbUpdate.current) {
+          if (payload.new) {
             const ev = payload.new as Evento;
-            setEvento(ev);
 
-            let loadedParticipantes = ev.participantes || [];
-            if (!ev.configuracao?.finalizado && ev.grupo_id && ev.modalidade_id && loadedParticipantes.length > 0) {
-              try {
-                const { data: dbRatings } = await supabase
-                  .from('ratings_jogador')
-                  .select('usuario_id, rating')
-                  .eq('grupo_id', ev.grupo_id)
-                  .eq('modalidade_id', ev.modalidade_id);
-
-                if (dbRatings) {
-                  loadedParticipantes = loadedParticipantes.map((p: any) => {
-                    const rRow = dbRatings.find((r) => r.usuario_id === p.id);
-                    if (rRow) {
-                      return { ...p, avaliacao: Number(rRow.rating) };
-                    }
-                    return p;
-                  });
-                }
-              } catch (e) {
-                console.error('Erro ao sincronizar estrelas dos participantes via realtime:', e);
+            // Se a atualização foi feita por outro usuário (não eu), mostrar toast
+            if (!skipDbUpdate.current) {
+              const ultimoSorteio = (ev.configuracao as any)?.ultimo_sorteio;
+              if (ultimoSorteio?.usuario_nome) {
+                showRemoteToast(`🔄 ${ultimoSorteio.usuario_nome} atualizou o evento`);
+              } else {
+                showRemoteToast('🔄 Evento atualizado por outro usuário');
               }
             }
 
-            setParticipantes(loadedParticipantes);
-            setTime1(ev.time1 || []);
-            setTime2(ev.time2 || []);
-            setVitoriasTime1(ev.vitorias_time1 || 0);
-            setVitoriasTime2(ev.vitorias_time2 || 0);
-            if (ev.configuracao) setConfig(ev.configuracao);
+            // Só aplicar se não foi eu quem atualizou (evitar loop/piscar)
+            if (!skipDbUpdate.current) {
+              setEvento(ev);
+
+              let loadedParticipantes = ev.participantes || [];
+              if (!ev.configuracao?.finalizado && ev.grupo_id && ev.modalidade_id && loadedParticipantes.length > 0) {
+                try {
+                  const { data: dbRatings } = await supabase
+                    .from('ratings_jogador')
+                    .select('usuario_id, rating')
+                    .eq('grupo_id', ev.grupo_id)
+                    .eq('modalidade_id', ev.modalidade_id);
+
+                  if (dbRatings) {
+                    loadedParticipantes = loadedParticipantes.map((p: any) => {
+                      const rRow = dbRatings.find((r) => r.usuario_id === p.id);
+                      if (rRow) {
+                        return { ...p, avaliacao: Number(rRow.rating) };
+                      }
+                      return p;
+                    });
+                  }
+                } catch (e) {
+                  console.error('Erro ao sincronizar estrelas dos participantes via realtime:', e);
+                }
+              }
+
+              setParticipantes(loadedParticipantes);
+              setTime1(ev.time1 || []);
+              setTime2(ev.time2 || []);
+              setVitoriasTime1(ev.vitorias_time1 || 0);
+              setVitoriasTime2(ev.vitorias_time2 || 0);
+              if (ev.configuracao) setConfig(ev.configuracao);
+            }
           }
         }
       )
@@ -466,8 +490,8 @@ export default function EventoDetails() {
     });
   };
 
-  // Sorteio de times inicial
-  const handleSortearClick = () => {
+  // Sorteio de times inicial (com trava anti-duplo)
+  const handleSortearClick = async () => {
     const presentes = participantes.filter((p) => p.checked);
     if (presentes.length < config.numberOfPlayers) {
       setDialog({
@@ -480,9 +504,52 @@ export default function EventoDetails() {
       return;
     }
 
+    // ---- TRAVA ANTI-SORTEIO DUPLO ----
+    // Busca o estado mais recente do evento direto do banco para checar se alguém sorteou recentemente
+    try {
+      const { data: freshEvento } = await supabase
+        .from('eventos')
+        .select('configuracao')
+        .eq('id', id)
+        .single();
+
+      if (freshEvento?.configuracao) {
+        const ultimoSorteio = (freshEvento.configuracao as any).ultimo_sorteio;
+        if (ultimoSorteio?.timestamp) {
+          const segundosAtras = Math.floor(
+            (Date.now() - new Date(ultimoSorteio.timestamp).getTime()) / 1000
+          );
+          if (segundosAtras < 15) {
+            // Sorteio muito recente — perguntar ao usuário
+            setDialog({
+              isOpen: true,
+              title: '⚠️ Sorteio Recente',
+              message: `${ultimoSorteio.usuario_nome || 'Alguém'} realizou um sorteio há ${segundosAtras} segundo(s). Deseja sortear novamente mesmo assim?`,
+              type: 'confirm',
+              onConfirm: () => {
+                setDialog((prev) => ({ ...prev, isOpen: false }));
+                executarSorteio(presentes);
+              },
+              onCancel: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+            });
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      // Se falhar a checagem, prossegue normalmente
+      console.warn('Aviso: não foi possível verificar trava de sorteio:', e);
+    }
+    // ----------------------------------
+
+    executarSorteio(presentes);
+  };
+
+  // Função interna que executa o sorteio + registra a trava
+  const executarSorteio = (presentes: Participante[]) => {
     const resultado = sortearTimes(presentes, config.numberOfPlayers, config.numberOfTeams);
     setDrawTeamsResult(resultado);
-    
+
     // Iniciar animação do sorteio!
     setIsDrawing(true);
     let count = 0;
@@ -496,6 +563,16 @@ export default function EventoDetails() {
         clearInterval(interval);
         setIsDrawing(false);
         setShowDrawResult(true);
+
+        // Registrar trava: quem sorteou e quando
+        const ultimoSorteio = {
+          usuario_id: currentUserProfile?.id || '',
+          usuario_nome: currentUserProfile?.nome || 'Usuário',
+          timestamp: new Date().toISOString(),
+        };
+        updateDatabase({
+          configuracao: { ...config, ultimo_sorteio: ultimoSorteio } as any,
+        });
       }
     }, 80);
   };
@@ -569,12 +646,20 @@ export default function EventoDetails() {
     });
     setParticipantes(novosParticipantes);
 
+    // Registrar trava: quem iniciou o jogo e quando
+    const ultimoSorteio = {
+      usuario_id: currentUserProfile?.id || '',
+      usuario_nome: currentUserProfile?.nome || 'Usuário',
+      timestamp: new Date().toISOString(),
+    };
+
     updateDatabase({
       time1: activeT1,
       time2: activeT2,
       vitorias_time1: 0,
       vitorias_time2: 0,
       participantes: novosParticipantes,
+      configuracao: { ...config, ultimo_sorteio: ultimoSorteio } as any,
     });
   };
 
@@ -1166,6 +1251,22 @@ export default function EventoDetails() {
 
   return (
     <div className="p-6 pb-28 w-full max-w-md mx-auto space-y-6">
+      {/* Toast de Atualização Remota */}
+      <AnimatePresence>
+        {remoteUpdateToast && (
+          <motion.div
+            key="remote-toast"
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -16, scale: 0.95 }}
+            transition={{ duration: 0.25 }}
+            className="fixed top-[4.5rem] left-1/2 -translate-x-1/2 z-[999] bg-slate-900/95 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 max-w-[90vw] backdrop-blur-sm border border-white/10"
+          >
+            <span className="text-emerald-400 text-sm">●</span>
+            <span>{remoteUpdateToast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Informações Básicas do Evento */}
       <div className="flex justify-between items-start gap-2">
         <div className="flex items-center gap-3">
