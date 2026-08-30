@@ -87,7 +87,7 @@ export default function AmigosList() {
             .insert({
               usuario_id: currentUserId,
               amigo_id: friendId,
-              aceito: false, // Inicia pendente
+              ativo: false, // Inicia pendente
             })
             .select()
             .single();
@@ -120,7 +120,7 @@ export default function AmigosList() {
     try {
       const { data, error } = await supabase
         .from('amigos')
-        .update({ aceito: true })
+        .update({ ativo: true })
         .eq('id', requestId)
         .select()
         .single();
@@ -207,7 +207,7 @@ export default function AmigosList() {
 
   // Solicitações pendentes que OUTROS enviaram para mim
   const solicitacoesRecebidas = amizades.filter(
-    (a) => a.amigo_id === currentUserId && a.aceito === false
+    (a) => a.amigo_id === currentUserId && a.ativo === false
   );
 
   return (
@@ -297,9 +297,9 @@ export default function AmigosList() {
                 (a.usuario_id === user.id && a.amigo_id === currentUserId)
             );
 
-            const ehAmigo = amizade && amizade.aceito === true;
-            const solicitei = amizade && amizade.usuario_id === currentUserId && amizade.aceito === false;
-            const recebiSolicitacao = amizade && amizade.amigo_id === currentUserId && amizade.aceito === false;
+            const ehAmigo = amizade && amizade.ativo === true;
+            const solicitei = amizade && amizade.usuario_id === currentUserId && amizade.ativo === false;
+            const recebiSolicitacao = amizade && amizade.amigo_id === currentUserId && amizade.ativo === false;
 
             return (
               <div
