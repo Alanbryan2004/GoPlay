@@ -198,8 +198,11 @@ describe('Algoritmo de Prioridades de Sorteio (Cenários 1, 2, 3 e 4)', () => {
     expect(selecionados.some(s => s.id === '2')).toBe(true);
     expect(selecionados.some(s => s.id === '6')).toBe(true);
 
-    // E todos os selecionados entram com prioridade 0
-    selecionados.forEach(s => expect(s.prioridade).toBe(0));
+    // E todos os selecionados entram com prioridade 0 na lista final de participantes
+    selecionados.forEach(s => {
+      const p = novosParticipantes.find(np => np.id === s.id);
+      expect(p?.prioridade).toBe(0);
+    });
   });
 
   it('Cenário 03: Múltiplos novos jogadores (N=0) e sorteio no nível N=1', () => {
@@ -295,8 +298,7 @@ describe('Algoritmo de Prioridades de Sorteio (Cenários 1, 2, 3 e 4)', () => {
 
     participantes.push(...timeAtivo);
 
-    // Selecionar 6 jogadores para entrar
-    const { selecionados } = selecionarProximosJogadores(participantes, timeAtivo, 6);
+    const { selecionados, novosParticipantes } = selecionarProximosJogadores(participantes, timeAtivo, 6);
 
     // Devem entrar:
     // - Os 2 de N=0 (20, 21)
@@ -310,7 +312,10 @@ describe('Algoritmo de Prioridades de Sorteio (Cenários 1, 2, 3 e 4)', () => {
     const selecionadosN2 = selecionados.filter(s => ['16', '1', '2', '6', '12', '10'].includes(s.id));
     expect(selecionadosN2.length).toBe(3);
 
-    // Todos os que entraram estão com prioridade zerada
-    selecionados.forEach(s => expect(s.prioridade).toBe(0));
+    // Todos os que entraram estão com prioridade zerada na lista de participantes
+    selecionados.forEach(s => {
+      const p = novosParticipantes.find(np => np.id === s.id);
+      expect(p?.prioridade).toBe(0);
+    });
   });
 });

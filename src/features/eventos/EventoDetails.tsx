@@ -453,8 +453,10 @@ export default function EventoDetails() {
 
   // Iniciar partida com os times sorteados
   const handleIniciarJogo = (t1: Participante[], t2: Participante[]) => {
-    setTime1(t1);
-    setTime2(t2);
+    const activeT1 = t1.map((p) => ({ ...p, prioridade: 0 }));
+    const activeT2 = t2.map((p) => ({ ...p, prioridade: 0 }));
+    setTime1(activeT1);
+    setTime2(activeT2);
     setPlacarTime1(0);
     setPlacarTime2(0);
     setVitoriasTime1(0);
@@ -474,8 +476,8 @@ export default function EventoDetails() {
     setParticipantes(novosParticipantes);
 
     updateDatabase({
-      time1: t1,
-      time2: t2,
+      time1: activeT1,
+      time2: activeT2,
       vitorias_time1: 0,
       vitorias_time2: 0,
       participantes: novosParticipantes,
@@ -583,11 +585,13 @@ export default function EventoDetails() {
         );
         novosParticipantes = finalParticipantes;
 
-        novoTime1.sort((a, b) => a.nome.localeCompare(b.nome));
-        novoTime2.sort((a, b) => a.nome.localeCompare(b.nome));
+        const activeT1 = novoTime1.map((p) => ({ ...p, prioridade: 0 }));
+        const activeT2 = novoTime2.map((p) => ({ ...p, prioridade: 0 }));
+        activeT1.sort((a, b) => a.nome.localeCompare(b.nome));
+        activeT2.sort((a, b) => a.nome.localeCompare(b.nome));
 
-        setTime1(novoTime1);
-        setTime2(novoTime2);
+        setTime1(activeT1);
+        setTime2(activeT2);
         setPlacarTime1(0);
         setPlacarTime2(0);
         setVitoriasTime1(0);
@@ -595,8 +599,8 @@ export default function EventoDetails() {
         setParticipantes(novosParticipantes);
 
         updateDatabase({
-          time1: novoTime1,
-          time2: novoTime2,
+          time1: activeT1,
+          time2: activeT2,
           vitorias_time1: 0,
           vitorias_time2: 0,
           participantes: novosParticipantes,
@@ -615,7 +619,9 @@ export default function EventoDetails() {
       config.numberOfPlayers
     );
     novosParticipantes = finalParticipantes;
-    novoTime.sort((a, b) => a.nome.localeCompare(b.nome));
+
+    const activeNovoTime = novoTime.map((p) => ({ ...p, prioridade: 0 }));
+    activeNovoTime.sort((a, b) => a.nome.localeCompare(b.nome));
 
     // Se atingiu o limite de vitórias e a ação for Mesclar (Misturar vencedor com a fila)
     if (
@@ -623,11 +629,11 @@ export default function EventoDetails() {
         newVitoriasTime2 === config.maxNumberOfVictories) &&
       config.actionAfterVictories === ActionAfterVictories.Mesclar
     ) {
-      const misturarFila = [...updatedTimeGanhador, ...novoTime];
+      const misturarFila = [...updatedTimeGanhador, ...activeNovoTime];
       const novosTimesSorteados = sortearTimes(misturarFila, config.numberOfPlayers, config.numberOfTeams);
       
-      const t1 = novosTimesSorteados[0];
-      const t2 = novosTimesSorteados[1];
+      const t1 = novosTimesSorteados[0].map((p) => ({ ...p, prioridade: 0 }));
+      const t2 = novosTimesSorteados[1].map((p) => ({ ...p, prioridade: 0 }));
 
       setTime1(t1);
       setTime2(t2);
@@ -649,26 +655,26 @@ export default function EventoDetails() {
       if (time1Venceu) {
         const winnerTime1 = updatedTime1.map((p) => ({ ...p, prioridade: 0 }));
         setTime1(winnerTime1);
-        setTime2(novoTime);
+        setTime2(activeNovoTime);
         setPlacarTime1(0);
         setPlacarTime2(0);
         setParticipantes(novosParticipantes);
         updateDatabase({
           time1: winnerTime1,
-          time2: novoTime,
+          time2: activeNovoTime,
           vitorias_time1: newVitoriasTime1,
           vitorias_time2: 0,
           participantes: novosParticipantes,
         });
       } else {
         const winnerTime2 = updatedTime2.map((p) => ({ ...p, prioridade: 0 }));
-        setTime1(novoTime);
+        setTime1(activeNovoTime);
         setTime2(winnerTime2);
         setPlacarTime1(0);
         setPlacarTime2(0);
         setParticipantes(novosParticipantes);
         updateDatabase({
-          time1: novoTime,
+          time1: activeNovoTime,
           time2: winnerTime2,
           vitorias_time1: 0,
           vitorias_time2: newVitoriasTime2,

@@ -176,7 +176,5 @@ export function selecionarProximosJogadores(
     }
   }
 
-  const selecionadosZerados = selecionados.map((p) => ({ ...p, prioridade: 0 }));
-
-  return { selecionados: selecionadosZerados, novosParticipantes: lista };
+  return { selecionados, novosParticipantes: lista };
 }
