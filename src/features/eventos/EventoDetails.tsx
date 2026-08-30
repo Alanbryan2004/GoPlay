@@ -92,12 +92,73 @@ export default function EventoDetails() {
 
     async function loadUsuarios() {
       try {
-        const { data, error } = await supabase.from('usuarios').select('id, nome, foto, email');
-        if (data && !error) {
-          setTodasPessoas(data);
+        // 1. Obter o usuário logado
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (!authUser) return;
+
+        const { data: profile } = await supabase
+          .from('usuarios')
+          .select('id')
+          .eq('email', authUser.email)
+          .single();
+        
+        if (!profile) return;
+        const loggedId = profile.id;
+
+        // 2. Buscar amigos ativos
+        const { data: dbAmigos } = await supabase
+          .from('amigos')
+          .select('*')
+          .or(`usuario_id.eq.${loggedId},amigo_id.eq.${loggedId}`)
+          .eq('ativo', true);
+
+        const friendIds = (dbAmigos || []).map((a) =>
+          a.usuario_id === loggedId ? a.amigo_id : a.usuario_id
+        );
+
+        // 3. Buscar membros do grupo (se o evento pertencer a um grupo)
+        let groupMemberIds: string[] = [];
+        const { data: evData } = await supabase
+          .from('eventos')
+          .select('grupo_id')
+          .eq('id', id)
+          .single();
+
+        if (evData && evData.grupo_id) {
+          const { data: dbMembros } = await supabase
+            .from('membros_grupo')
+            .select('usuario_id')
+            .eq('grupo_id', evData.grupo_id);
+          
+          if (dbMembros) {
+            groupMemberIds = dbMembros.map(m => m.usuario_id);
+          }
+        }
+
+        // Unir todos os IDs permitidos (eu mesmo + amigos + membros do grupo)
+        const allowedIds = Array.from(new Set([loggedId, ...friendIds, ...groupMemberIds]));
+
+        if (allowedIds.length > 0) {
+          const { data: allowedUsers, error: usersError } = await supabase
+            .from('usuarios')
+            .select('id, nome, foto, email')
+            .in('id', allowedIds);
+
+          if (!usersError && allowedUsers) {
+            setTodasPessoas(allowedUsers);
+          }
+        } else {
+          // Fallback: Eu mesmo
+          const { data: selfUser } = await supabase
+            .from('usuarios')
+            .select('id, nome, foto, email')
+            .eq('id', loggedId);
+          if (selfUser) {
+            setTodasPessoas(selfUser);
+          }
         }
       } catch (err) {
-        console.error(err);
+        console.error('Erro ao carregar usuários permitidos:', err);
       }
     }
 
@@ -208,14 +269,21 @@ export default function EventoDetails() {
     updateDatabase({ participantes: novosParticipantes });
   };
 
-  // Lógica de digitação e filtragem de cadastrados
+  // Lógica de digitação e filtragem de cadastrados com suporte a acentos
   const handleInputChange = (value: string) => {
     setNovoNome(value);
+    
+    // Função auxiliar para remover acentos e deixar em minúsculo
+    const normalizeStr = (str: string) =>
+      str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : '';
+
     if (value.trim().length >= 2) {
+      const normalizedValue = normalizeStr(value);
       const filtered = todasPessoas.filter((u) => {
-        const matchText = u.nome.toLowerCase().includes(value.toLowerCase());
+        const normalizedUserName = normalizeStr(u.nome);
+        const matchText = normalizedUserName.includes(normalizedValue);
         const alreadyInList = participantes.some(
-          (p) => p.nome.toLowerCase() === u.nome.toLowerCase() || p.id === u.id
+          (p) => normalizeStr(p.nome) === normalizedUserName || p.id === u.id
         );
         return matchText && !alreadyInList;
       });
