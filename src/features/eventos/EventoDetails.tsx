@@ -1966,10 +1966,20 @@ export default function EventoDetails() {
                         </h3>
                         <div className="grid grid-cols-2 gap-1.5">
                           {dreamTeam.map((p, idx) => (
-                            <div key={p.id} className="flex justify-between items-center bg-white/80 py-1.5 px-2.5 rounded-lg text-[10px] border border-amber-150">
-                              <span className="font-bold text-slate-700 truncate pr-1">
-                                #{idx + 1} {p.nome}
-                              </span>
+                            <div key={p.id} className="flex justify-between items-center bg-white/80 py-1.5 px-2 rounded-lg text-[10px] border border-amber-150">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                <span className="font-bold text-slate-400 flex-shrink-0">#{idx + 1}</span>
+                                {p.foto ? (
+                                  <img src={p.foto} alt={p.nome} className="w-5 h-5 rounded-full object-cover ring-1 ring-amber-300/50 flex-shrink-0" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-black text-[9px] border border-amber-250 flex-shrink-0">
+                                    {p.nome[0]}
+                                  </div>
+                                )}
+                                <span className="font-bold text-slate-700 truncate pr-1">
+                                  {p.nome}
+                                </span>
+                              </div>
                               <span className="text-amber-600 font-extrabold flex-shrink-0">
                                 {p.jogosGanhos || 0} Vit.
                               </span>
@@ -1979,18 +1989,28 @@ export default function EventoDetails() {
                       </div>
 
                       {/* Time Pesadelo */}
-                      <div className="p-3.5 bg-gradient-to-br from-slate-100 to-slate-200/50 border border-slate-350 rounded-2xl text-left space-y-2 shadow-sm">
+                      <div className="p-3.5 bg-gradient-to-br from-slate-100 to-slate-200/50 border border-slate-355 rounded-2xl text-left space-y-2 shadow-sm">
                         <h3 className="text-xs font-black text-slate-550 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-300 pb-1.5">
                           <Skull size={14} className="text-slate-500" />
                           Time Pesadelo
                         </h3>
                         <div className="grid grid-cols-2 gap-1.5">
                           {nightmareTeam.map((p, idx) => (
-                            <div key={p.id} className="flex justify-between items-center bg-white/80 py-1.5 px-2.5 rounded-lg text-[10px] border border-slate-200">
-                              <span className="font-bold text-slate-700 truncate pr-1">
-                                #{ranked.length - idx} {p.nome}
-                              </span>
-                              <span className="text-slate-500 font-semibold flex-shrink-0">
+                            <div key={p.id} className="flex justify-between items-center bg-white/80 py-1.5 px-2 rounded-lg text-[10px] border border-slate-200">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                <span className="font-bold text-slate-400 flex-shrink-0">#{ranked.length - idx}</span>
+                                {p.foto ? (
+                                  <img src={p.foto} alt={p.nome} className="w-5 h-5 rounded-full object-cover ring-1 ring-slate-300 flex-shrink-0" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-slate-150 text-slate-650 flex items-center justify-center font-bold text-[9px] border border-slate-250 flex-shrink-0">
+                                    {p.nome[0]}
+                                  </div>
+                                )}
+                                <span className="font-bold text-slate-700 truncate pr-1">
+                                  {p.nome}
+                                </span>
+                              </div>
+                              <span className="text-slate-550 font-semibold flex-shrink-0">
                                 {p.jogosGanhos || 0} Vit.
                               </span>
                             </div>
