@@ -23,10 +23,8 @@ import {
 import Dialog from '../../components/common/Dialog';
 import {
   sortearTimes,
-  construirFilaPrioridades,
-  montarTime,
   subirPrioridade,
-  getMaxPrioridade
+  selecionarProximosJogadores
 } from '../../utils/sorteioUtils';
 import { v4 as uuidv4 } from 'uuid';
 import dayjs from 'dayjs';
@@ -464,12 +462,15 @@ export default function EventoDetails() {
     setShowDrawResult(false);
 
     // Resetar estatísticas de jogos recentes ao iniciar novo sorteio global
-    const novosParticipantes = participantes.map((p) => ({
-      ...p,
-      prioridade: 0,
-      jogos: 0,
-      jogosGanhos: 0,
-    }));
+    const novosParticipantes = participantes.map((p) => {
+      const isPlaying = t1.some((x) => x.id === p.id) || t2.some((x) => x.id === p.id);
+      return {
+        ...p,
+        prioridade: isPlaying ? 0 : 1,
+        jogos: 0,
+        jogosGanhos: 0,
+      };
+    });
     setParticipantes(novosParticipantes);
 
     updateDatabase({
@@ -489,8 +490,9 @@ export default function EventoDetails() {
 
     if (!jogadorRemovido) return;
 
-    // Aumentar a prioridade do jogador na lista global para mandá-lo ao fim da fila
-    const novosParticipantes = subirPrioridade(participantes, [jogadorRemovido]);
+    // Aumentar a prioridade do jogador na lista global para mandá-lo ao fim da fila (N = maxN + 1)
+    const ativosNoCampo = [...time1, ...time2].filter((p) => p.id !== jogadorId);
+    const novosParticipantes = subirPrioridade(participantes, ativosNoCampo, [jogadorRemovido]);
     setParticipantes(novosParticipantes);
 
     // Filtrar jogador do time ativo correspondente
@@ -564,19 +566,22 @@ export default function EventoDetails() {
     ) {
       if (config.actionAfterVictories === ActionAfterVictories.Remover) {
         // Remover: ambos os times vão para o fim da fila de prioridade
-        // Subir prioridade do perdedor primeiro, depois do ganhador
-        novosParticipantes = subirPrioridade(novosParticipantes, updatedTimePerdedor);
-        novosParticipantes = subirPrioridade(novosParticipantes, updatedTimeGanhador);
+        // Subir prioridade do perdedor primeiro (com o ganhador ainda jogando), depois do ganhador
+        novosParticipantes = subirPrioridade(novosParticipantes, updatedTimeGanhador, updatedTimePerdedor);
+        novosParticipantes = subirPrioridade(novosParticipantes, [], updatedTimeGanhador);
 
-        // Sortear dois novos times da fila
-        let todosAguardando = novosParticipantes.filter((p) => p.checked);
-        let fila = construirFilaPrioridades(todosAguardando);
-        
-        const novoTime1 = montarTime(fila, config.numberOfPlayers, novosParticipantes);
-        
-        todosAguardando = todosAguardando.filter((p) => !novoTime1.some((nt) => nt.id === p.id));
-        fila = construirFilaPrioridades(todosAguardando);
-        const novoTime2 = montarTime(fila, config.numberOfPlayers, novosParticipantes);
+        // Selecionar dois novos times da fila usando as prioridades N
+        const { selecionados: novoTime1, novosParticipantes: tempParticipantes } = selecionarProximosJogadores(
+          novosParticipantes,
+          [],
+          config.numberOfPlayers
+        );
+        const { selecionados: novoTime2, novosParticipantes: finalParticipantes } = selecionarProximosJogadores(
+          tempParticipantes,
+          novoTime1,
+          config.numberOfPlayers
+        );
+        novosParticipantes = finalParticipantes;
 
         novoTime1.sort((a, b) => a.nome.localeCompare(b.nome));
         novoTime2.sort((a, b) => a.nome.localeCompare(b.nome));
@@ -600,23 +605,16 @@ export default function EventoDetails() {
       }
     }
 
-    // Caso padrão: Apenas o time perdedor vai para a fila
-    novosParticipantes = subirPrioridade(novosParticipantes, updatedTimePerdedor);
+    // Caso padrão: Apenas o time perdedor vai para a fila (ganha prioridade N = maxN + 1)
+    novosParticipantes = subirPrioridade(novosParticipantes, updatedTimeGanhador, updatedTimePerdedor);
 
-    // Obter os próximos jogadores da fila para compor o próximo time
-    let todosAguardando = novosParticipantes.filter(
-      (p) => p.checked && !todosJogando.some((tj) => tj.id === p.id)
+    // Selecionar o próximo time de entrantes da fila
+    const { selecionados: novoTime, novosParticipantes: finalParticipantes } = selecionarProximosJogadores(
+      novosParticipantes,
+      updatedTimeGanhador,
+      config.numberOfPlayers
     );
-
-    // Se não houver jogadores aguardando suficientes, incluir os perdedores que acabaram de ir para a fila
-    if (todosAguardando.length < config.numberOfPlayers) {
-      todosAguardando = novosParticipantes.filter(
-        (p) => p.checked && !updatedTimeGanhador.some((tg) => tg.id === p.id)
-      );
-    }
-
-    const fila = construirFilaPrioridades(todosAguardando);
-    const novoTime = montarTime(fila, config.numberOfPlayers, novosParticipantes);
+    novosParticipantes = finalParticipantes;
     novoTime.sort((a, b) => a.nome.localeCompare(b.nome));
 
     // Se atingiu o limite de vitórias e a ação for Mesclar (Misturar vencedor com a fila)
@@ -785,15 +783,19 @@ export default function EventoDetails() {
     (p) => p.checked && !time1.some((t) => t.id === p.id) && !time2.some((t) => t.id === p.id)
   );
 
-  // Ordenar fila usando a prioridade real
-  const filaOrdenada = construirFilaPrioridades(jogadoresFila).flat();
+  // Ordenar fila usando a prioridade real (N menor primeiro, depois ordem alfabética)
+  const filaOrdenada = [...jogadoresFila].sort((a, b) => {
+    const pA = a.prioridade || 0;
+    const pB = b.prioridade || 0;
+    if (pA !== pB) return pA - pB;
+    return a.nome.localeCompare(b.nome);
+  });
 
-  // NOVO REQUISITO: Estimar o "Próximo Time" que vai jogar
-  // É calculado de forma reativa a partir dos primeiros da fila
-  const estimadoProximoTime = montarTime(
-    construirFilaPrioridades(jogadoresFila),
-    config.numberOfPlayers,
-    participantes
+  // NOVO REQUISITO: Estimar o "Próximo Time" que vai jogar usando a prioridade N
+  const { selecionados: estimadoProximoTime } = selecionarProximosJogadores(
+    participantes,
+    [...time1, ...time2],
+    config.numberOfPlayers
   );
 
   if (loading) {

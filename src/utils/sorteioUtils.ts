@@ -23,8 +23,6 @@ export function sortearTimes(
   const teams: Participante[][] = Array.from({ length: numberOfTeams }, () => []);
   
   // Distribuição equilibrada (Snake / Serpentina ou Round-Robin)
-  // Vamos usar Serpentina (Snake Draft) para melhor equilíbrio:
-  // Ex: Time 1, Time 2, Time 2, Time 1...
   let index = 0;
   let ascending = true;
 
@@ -66,87 +64,98 @@ export function randomizarJogadores(participantes: Participante[]): Participante
   return shuffled;
 }
 
-export function sortParticipanteByMenosJogos(a: Participante, b: Participante) {
-  const jogosA = a.jogos || 0;
-  const jogosB = b.jogos || 0;
+// Retorna a prioridade máxima (N) entre os jogadores na fila
+export function getMaxPrioridade(todosParticipantes: Participante[], ativosNoCampo: Participante[]): number {
+  const jogandoIds = new Set(ativosNoCampo.map((p) => p.id));
+  const filaEspera = todosParticipantes.filter((p) => p.checked && !jogandoIds.has(p.id));
   
-  if (jogosA !== jogosB) {
-    return jogosA - jogosB;
-  }
-  
-  return Math.random() - 0.5;
+  return filaEspera.length > 0
+    ? Math.max(...filaEspera.map((p) => p.prioridade || 0))
+    : 0;
 }
 
-export function construirFilaPrioridades(todosParticipantes: Participante[]) {
-  const fila: Participante[][] = [];
+// Eleva a prioridade do time que está saindo baseado no maior N da fila que fica
+export function subirPrioridade(
+  todosParticipantes: Participante[],
+  ativosNoCampo: Participante[],
+  timeSaindo: Participante[]
+): Participante[] {
+  const timeSaindoIds = new Set(timeSaindo.map((p) => p.id));
+  const jogandoIds = new Set(ativosNoCampo.map((p) => p.id));
   
-  for (const jogador of todosParticipantes) {
-    if (!jogador.checked) continue;
-    
-    const prio = jogador.prioridade || 0;
-    if (!fila[prio]) {
-      fila[prio] = [];
-    }
-    fila[prio].push(jogador);
-  }
-  
-  return fila.filter((grupo) => !!grupo);
-}
+  // Fila que permanece esperando (exclui quem estava jogando e quem está saindo)
+  const filaQueFica = todosParticipantes.filter(
+    (p) => p.checked && !jogandoIds.has(p.id) && !timeSaindoIds.has(p.id)
+  );
 
-export function montarTime(fila: Participante[][], qtde: number, todosParticipantes: Participante[]): Participante[] {
-  if (fila.length === 0) return [];
+  const maxN = filaQueFica.length > 0
+    ? Math.max(...filaQueFica.map((p) => p.prioridade || 0))
+    : 0;
 
-  const novoTime: Participante[] = [];
-  
-  while (novoTime.length < qtde) {
-    let playersAddedThisIteration = false;
-    
-    for (const grupo of fila) {
-      // Filtrar apenas os que estão presentes no evento geral
-      const presentes = grupo.filter((p) =>
-        todosParticipantes.some((tp) => tp.id === p.id && tp.checked)
-      );
-      
-      // Filtrar apenas os que já não foram escalados para este time
-      const habilitados = presentes.filter(
-        (p) => !novoTime.some((jt) => jt.id === p.id)
-      );
-      
-      // Ordenar por menos jogos dentro do mesmo nível de prioridade
-      habilitados.sort(sortParticipanteByMenosJogos);
-
-      while (habilitados.length > 0) {
-        novoTime.push(habilitados.shift() as Participante);
-        playersAddedThisIteration = true;
-
-        if (novoTime.length >= qtde) {
-          return novoTime;
-        }
-      }
-    }
-    
-    // Evitar loop infinito se não houver jogadores suficientes na fila
-    if (!playersAddedThisIteration) {
-      break;
-    }
-  }
-
-  return novoTime;
-}
-
-export function getMaxPrioridade(todosParticipantes: Participante[]): number {
-  return todosParticipantes.reduce((acc, p) => {
-    return (p.prioridade || 0) > acc ? p.prioridade : acc;
-  }, 0);
-}
-
-export function subirPrioridade(todosParticipantes: Participante[], grupo: Participante[]): Participante[] {
-  const newPrioridade = getMaxPrioridade(todosParticipantes) + 1;
+  const novoN = maxN + 1;
 
   return todosParticipantes.map((p) => {
-    if (grupo.some((gp) => gp.id === p.id)) {
-      return { ...p, prioridade: newPrioridade };
+    if (timeSaindoIds.has(p.id)) {
+      return { ...p, prioridade: novoN };
     }
     return p;
   });
+}
+
+// Algoritmo de seleção prioritária por níveis (N=0, N=1, N=2...)
+export function selecionarProximosJogadores(
+  todosParticipantes: Participante[],
+  ativosNoCampo: Participante[],
+  quantidadeNecessaria: number
+): { selecionados: Participante[]; novosParticipantes: Participante[] } {
+  let lista = todosParticipantes.map((p) => ({ ...p }));
+  const jogandoIds = new Set(ativosNoCampo.map((p) => p.id));
+  const filaEspera = lista.filter((p) => p.checked && !jogandoIds.has(p.id));
+
+  // Agrupar fila por nível de prioridade (N)
+  const gruposPorN: { [n: number]: Participante[] } = {};
+  filaEspera.forEach((p) => {
+    const n = p.prioridade || 0;
+    if (!gruposPorN[n]) {
+      gruposPorN[n] = [];
+    }
+    gruposPorN[n].push(p);
+  });
+
+  // Ordenar níveis de prioridade de forma crescente (0, 1, 2, 3...)
+  const niveisOrdenados = Object.keys(gruposPorN)
+    .map(Number)
+    .sort((a, b) => a - b);
+
+  const selecionados: Participante[] = [];
+  let slotsFaltantes = quantidadeNecessaria;
+
+  for (const n of niveisOrdenados) {
+    if (slotsFaltantes <= 0) break;
+
+    const grupo = gruposPorN[n];
+    if (grupo.length <= slotsFaltantes) {
+      // Todos desse nível entram
+      selecionados.push(...grupo);
+      slotsFaltantes -= grupo.length;
+    } else {
+      // Sorteio dentro do mesmo nível de prioridade
+      const shuffleGrupo = [...grupo].sort(() => Math.random() - 0.5);
+      const escolhidos = shuffleGrupo.slice(0, slotsFaltantes);
+      selecionados.push(...escolhidos);
+      slotsFaltantes = 0;
+    }
+  }
+
+  const selecionadosIds = new Set(selecionados.map((p) => p.id));
+
+  // Resetar a prioridade para 0 dos que entram em quadra
+  lista = lista.map((p) => {
+    if (selecionadosIds.has(p.id) || jogandoIds.has(p.id)) {
+      return { ...p, prioridade: 0 };
+    }
+    return p;
+  });
+
+  return { selecionados, novosParticipantes: lista };
 }
