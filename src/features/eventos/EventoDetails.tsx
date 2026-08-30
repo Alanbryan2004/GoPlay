@@ -388,9 +388,25 @@ export default function EventoDetails() {
   // Alternar presença
   const togglePresenca = (index: number) => {
     const novos = [...participantes];
-    novos[index].checked = !novos[index].checked;
+    const player = novos[index];
+    player.checked = !player.checked;
+    
+    // Se o jogador foi desmarcado (checked = false), garantir que ele saia dos times ativos se estivesse jogando
+    let novoTime1 = [...time1];
+    let novoTime2 = [...time2];
+    if (!player.checked) {
+      novoTime1 = time1.filter((p) => p.id !== player.id);
+      novoTime2 = time2.filter((p) => p.id !== player.id);
+      setTime1(novoTime1);
+      setTime2(novoTime2);
+    }
+
     setParticipantes(novos);
-    updateDatabase({ participantes: novos });
+    updateDatabase({ 
+      participantes: novos,
+      time1: novoTime1,
+      time2: novoTime2
+    });
   };
 
   // Atualizar avaliação (Rating)
@@ -408,15 +424,39 @@ export default function EventoDetails() {
   // Deletar jogador da lista geral do evento
   const handleDeleteJogador = (id: string) => {
     const novos = participantes.filter((p) => p.id !== id);
+    const novoTime1 = time1.filter((p) => p.id !== id);
+    const novoTime2 = time2.filter((p) => p.id !== id);
+
+    setTime1(novoTime1);
+    setTime2(novoTime2);
     setParticipantes(novos);
-    updateDatabase({ participantes: novos });
+    updateDatabase({ 
+      participantes: novos,
+      time1: novoTime1,
+      time2: novoTime2
+    });
   };
 
   // Toggle todos os checkboxes
   const toggleSelectAll = (checked: boolean) => {
     const novos = participantes.map((p) => ({ ...p, checked }));
+    let novoTime1 = [...time1];
+    let novoTime2 = [...time2];
+    
+    if (!checked) {
+      // Se desmarcou todos, remove todo mundo das equipes ativas
+      novoTime1 = [];
+      novoTime2 = [];
+      setTime1([]);
+      setTime2([]);
+    }
+
     setParticipantes(novos);
-    updateDatabase({ participantes: novos });
+    updateDatabase({ 
+      participantes: novos,
+      time1: novoTime1,
+      time2: novoTime2
+    });
   };
 
   // Sorteio de times inicial
