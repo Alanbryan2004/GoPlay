@@ -38,12 +38,45 @@ export default function EventosList() {
   const fetchEventos = async () => {
     setLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      // Buscar perfil do usuário para ter seu ID do banco
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('email', user.email)
+        .single();
+      
+      const resolvedUserId = userData?.id || user.id;
+
       let query = supabase.from('eventos').select('*');
+
       if (grupoId) {
+        // Filtro específico vindo da URL/parâmetro
         query = query.eq('grupo_id', grupoId);
       } else {
-        query = query.is('grupo_id', null);
+        // Obter os grupos onde o usuário está aprovado
+        const { data: userGroups } = await supabase
+          .from('membros_grupo')
+          .select('grupo_id')
+          .eq('usuario_id', resolvedUserId)
+          .eq('status', 'aprovado');
+
+        const groupIds = userGroups ? userGroups.map((g) => g.grupo_id).filter(Boolean) : [];
+
+        if (groupIds.length > 0) {
+          // Trazer eventos sem grupo OU vinculados aos grupos do usuário
+          query = query.or(`grupo_id.is.null,grupo_id.in.(${JSON.stringify(groupIds).slice(1, -1)})`);
+        } else {
+          // Apenas eventos públicos/sem grupo
+          query = query.is('grupo_id', null);
+        }
       }
+
       const { data, error } = await query.order('data', { ascending: true });
 
       if (!error && data) {
