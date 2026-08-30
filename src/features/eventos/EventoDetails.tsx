@@ -62,6 +62,8 @@ export default function EventoDetails() {
   const [showRanking, setShowRanking] = useState(false);
   const [showDrawResult, setShowDrawResult] = useState(false);
   const [drawTeamsResult, setDrawTeamsResult] = useState<Participante[][]>([]);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [shuffleName, setShuffleName] = useState('');
   const [showPodium, setShowPodium] = useState(false);
   const [dialog, setDialog] = useState<{
     isOpen: boolean;
@@ -433,7 +435,22 @@ export default function EventoDetails() {
 
     const resultado = sortearTimes(presentes, config.numberOfPlayers, config.numberOfTeams);
     setDrawTeamsResult(resultado);
-    setShowDrawResult(true);
+    
+    // Iniciar animação do sorteio!
+    setIsDrawing(true);
+    let count = 0;
+    const interval = setInterval(() => {
+      const randomPlayer = presentes[Math.floor(Math.random() * presentes.length)];
+      if (randomPlayer) {
+        setShuffleName(randomPlayer.nome);
+      }
+      count++;
+      if (count >= 25) { // 2 segundos (25 * 80ms)
+        clearInterval(interval);
+        setIsDrawing(false);
+        setShowDrawResult(true);
+      }
+    }, 80);
   };
 
   // Iniciar partida com os times sorteados
@@ -1280,6 +1297,61 @@ export default function EventoDetails() {
                   </div>
                 ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Animação de Sorteio */}
+      {isDrawing && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
+          <div className="bg-white/10 border border-white/20 rounded-3xl w-full max-w-sm shadow-2xl p-8 flex flex-col items-center justify-center space-y-6 text-center text-white relative overflow-hidden">
+            <style>{`
+              @keyframes loadingProgress {
+                0% { width: 0%; }
+                100% { width: 100%; }
+              }
+            `}</style>
+            
+            {/* Efeitos de Luz de Fundo */}
+            <div className="absolute -top-12 -left-12 w-32 h-32 bg-red-500/25 rounded-full blur-2xl animate-pulse" />
+            <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-cyan-500/25 rounded-full blur-2xl animate-pulse" />
+
+            {/* Ícone Principal Girando/Pulsando */}
+            <div className="relative flex items-center justify-center w-24 h-24 bg-gradient-to-tr from-[#eb3237] to-red-500 rounded-full shadow-lg shadow-red-500/30 animate-bounce">
+              <Trophy size={42} className="text-white animate-pulse" />
+              <div className="absolute inset-0 border-4 border-dashed border-white/40 rounded-full animate-spin [animation-duration:8s]" />
+            </div>
+
+            {/* Textos */}
+            <div className="space-y-2">
+              <h2 className="text-xl font-black tracking-widest uppercase bg-gradient-to-r from-white via-slate-100 to-slate-350 bg-clip-text text-transparent">
+                Sorteando Times
+              </h2>
+              <p className="text-xs text-slate-350 font-bold uppercase tracking-widest">
+                Definindo os confrontos...
+              </p>
+            </div>
+
+            {/* Efeito de Shuffle do Jogador Atual Sendo "Processado" */}
+            <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 min-h-[70px] flex flex-col items-center justify-center relative overflow-hidden">
+              <span className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1 animate-pulse">
+                Selecionando
+              </span>
+              <span className="text-base font-extrabold tracking-wide truncate max-w-full animate-fade-in text-white">
+                {shuffleName}
+              </span>
+            </div>
+
+            {/* Barra de Progresso Animada */}
+            <div className="w-full bg-white/15 h-1.5 rounded-full overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-red-500 via-amber-500 to-cyan-500 h-full rounded-full"
+                style={{
+                  animation: 'loadingProgress 2s linear forwards'
+                }}
+              />
+            </div>
+
           </div>
         </div>
       )}
