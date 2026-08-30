@@ -19,7 +19,9 @@ import {
   Users,
   AlertCircle,
   ArrowLeft,
-  Share2
+  Share2,
+  Skull,
+  Crown
 } from 'lucide-react';
 import Dialog from '../../components/common/Dialog';
 import {
@@ -64,6 +66,7 @@ export default function EventoDetails() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [shuffleName, setShuffleName] = useState('');
   const [showPodium, setShowPodium] = useState(false);
+  const [podiumStep, setPodiumStep] = useState<1 | 2>(1);
   const [showSubstituirModal, setShowSubstituirModal] = useState(false);
   const [substituirTarget, setSubstituirTarget] = useState<{ timeIndex: 1 | 2; slotIndex: number } | null>(null);
   const [dialog, setDialog] = useState<{
@@ -888,6 +891,7 @@ export default function EventoDetails() {
           
           setParticipantes(updatedParticipantes);
           setShowConfig(false);
+          setPodiumStep(1);
           setShowPodium(true); // Exibe o Pódio antes de ir embora!
         } catch (err: any) {
           setDialog({
@@ -903,9 +907,10 @@ export default function EventoDetails() {
     });
   };
 
-  // Compartilhar ranking final do evento como imagem
+  // Compartilhar ranking final do evento ou destaques como imagem
   const handleCompartilharRanking = async () => {
-    const el = document.getElementById('ranking-podium-content');
+    const elementId = podiumStep === 1 ? 'ranking-podium-content' : 'ranking-highlights-content';
+    const el = document.getElementById(elementId);
     if (!el) return;
 
     try {
@@ -921,18 +926,26 @@ export default function EventoDetails() {
       // 2. Converter o canvas para Blob
       canvas.toBlob(async (blob) => {
         if (!blob) {
-          throw new Error('Falha ao gerar imagem do ranking');
+          throw new Error('Falha ao gerar imagem');
         }
 
-        const filename = `Ranking_${evento?.descricao || 'Evento'}.png`;
+        const prefix = podiumStep === 1 ? 'Ranking' : 'Destaques';
+        const filename = `${prefix}_${evento?.descricao || 'Evento'}.png`;
         const file = new File([blob], filename, { type: 'image/png' });
+
+        const titleText = podiumStep === 1 
+          ? `Ranking Final - ${evento?.descricao || 'GoPlay'}`
+          : `Time dos Sonhos & Pesadelo - ${evento?.descricao || 'GoPlay'}`;
+        const bodyText = podiumStep === 1
+          ? 'Confira o pódio do nosso evento no GoPlay! 🏆'
+          : 'Confira o Time dos Sonhos e o Time Pesadelo do nosso evento no GoPlay! 🏆💀';
 
         // 3. Tentar usar o Web Share API do navegador (comum em celulares)
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
-            title: `Ranking Final - ${evento?.descricao || 'GoPlay'}`,
-            text: 'Confira o pódio do nosso evento no GoPlay! 🏆'
+            title: titleText,
+            text: bodyText
           });
         } else {
           // 4. Fallback: Se não puder compartilhar direto, faz o download da imagem
@@ -948,7 +961,7 @@ export default function EventoDetails() {
           setDialog({
             isOpen: true,
             title: 'Download Concluído',
-            message: 'Imagem do ranking baixada com sucesso! Você já pode compartilhá-la nas suas redes.',
+            message: `Imagem de ${podiumStep === 1 ? 'ranking' : 'destaques'} baixada com sucesso! Você já pode compartilhá-la nas suas redes.`,
             type: 'alert',
             onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
           });
@@ -959,7 +972,7 @@ export default function EventoDetails() {
       setDialog({
         isOpen: true,
         title: 'Erro',
-        message: 'Não foi possível compartilhar o ranking: ' + err.message,
+        message: 'Não foi possível compartilhar: ' + err.message,
         type: 'alert',
         onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
       });
@@ -1786,122 +1799,212 @@ export default function EventoDetails() {
       {/* Modal de Pódio/Ranking Final */}
       {showPodium && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-6 animate-fade-in">
-          <div id="ranking-podium-content" className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 flex flex-col space-y-4 max-h-[90vh] overflow-y-auto animate-slide-in">
-            {/* Header */}
-            <div className="text-center">
-              <span className="text-2xl">🏆</span>
-              <h2 className="text-lg font-black text-slate-900 uppercase mt-1">Ranking Final</h2>
-              <p className="text-[10px] font-bold text-slate-450 uppercase tracking-widest">{evento?.descricao}</p>
-            </div>
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 flex flex-col space-y-4 max-h-[90vh] overflow-y-auto animate-slide-in relative">
+            {/* Botão de voltar (apenas no passo 2) */}
+            {podiumStep === 2 && (
+              <button
+                onClick={() => setPodiumStep(1)}
+                className="absolute top-4 left-4 p-1 text-slate-400 hover:text-slate-650 rounded-lg hover:bg-slate-100 transition-all border-0 bg-transparent cursor-pointer"
+                title="Voltar para o Pódio"
+              >
+                <ArrowLeft size={16} />
+              </button>
+            )}
 
-            {/* Render 3D Podium */}
-            {(() => {
-              const ranked = [...participantes].sort((a, b) => {
-                const vA = a.jogosGanhos || 0;
-                const vB = b.jogosGanhos || 0;
-                const dA = (a.jogos || 0) - vA;
-                const dB = (b.jogos || 0) - vB;
-                if (vB !== vA) return vB - vA;
-                return dA - dB;
-              });
-              const p1 = ranked[0];
-              const p2 = ranked[1];
-              const p3 = ranked[2];
-              const rest = ranked.slice(3);
+            {podiumStep === 1 ? (
+              /* PASSO 1: PÓDIO E RANKING COMPLETO */
+              <div id="ranking-podium-content" className="flex flex-col space-y-4 w-full">
+                {/* Header */}
+                <div className="text-center">
+                  <span className="text-2xl">🏆</span>
+                  <h2 className="text-lg font-black text-slate-900 uppercase mt-1">Ranking Final</h2>
+                  <p className="text-[10px] font-bold text-slate-450 uppercase tracking-widest">{evento?.descricao}</p>
+                </div>
 
-              return (
-                <>
-                  <div className="flex items-end justify-center gap-3 pt-6 pb-2 min-h-[190px]">
-                    {/* 2º Lugar (Esquerda) */}
-                    {p2 ? (
-                      <div className="flex flex-col items-center flex-1 min-w-0">
-                        <div className="relative mb-2">
-                          {p2.foto ? (
-                            <img src={p2.foto} alt={p2.nome} className="w-12 h-12 rounded-full object-cover border-2 border-slate-300 ring-2 ring-slate-300/25" />
-                          ) : (
-                            <div className="w-12 h-12 rounded-full bg-slate-200 text-slate-650 flex items-center justify-center font-bold text-sm border-2 border-slate-300">
-                              {p2.nome[0]}
+                {/* Render 3D Podium */}
+                {(() => {
+                  const ranked = [...participantes].sort((a, b) => {
+                    const vA = a.jogosGanhos || 0;
+                    const vB = b.jogosGanhos || 0;
+                    const dA = (a.jogos || 0) - vA;
+                    const dB = (b.jogos || 0) - vB;
+                    if (vB !== vA) return vB - vA;
+                    return dA - dB;
+                  });
+                  const p1 = ranked[0];
+                  const p2 = ranked[1];
+                  const p3 = ranked[2];
+                  const rest = ranked.slice(3);
+
+                  return (
+                    <>
+                      <div className="flex items-end justify-center gap-3 pt-6 pb-2 min-h-[190px]">
+                        {/* 2º Lugar (Esquerda) */}
+                        {p2 ? (
+                          <div className="flex flex-col items-center flex-1 min-w-0">
+                            <div className="relative mb-2">
+                              {p2.foto ? (
+                                <img src={p2.foto} alt={p2.nome} className="w-12 h-12 rounded-full object-cover border-2 border-slate-300 ring-2 ring-slate-300/25" />
+                              ) : (
+                                <div className="w-12 h-12 rounded-full bg-slate-200 text-slate-650 flex items-center justify-center font-bold text-sm border-2 border-slate-300">
+                                  {p2.nome[0]}
+                                </div>
+                              )}
+                              <div className="absolute -top-3 -right-2 bg-slate-300 text-slate-800 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">2</div>
                             </div>
-                          )}
-                          <div className="absolute -top-3 -right-2 bg-slate-300 text-slate-800 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">2</div>
-                        </div>
-                        <span className="text-[10px] font-bold text-slate-700 truncate w-full text-center px-1">{p2.nome}</span>
-                        <span className="text-[9px] font-semibold text-slate-500">{p2.jogosGanhos || 0} Vit.</span>
-                        <div className="w-full bg-gradient-to-t from-slate-100 to-slate-50 border-t border-slate-300 h-12 rounded-t-lg mt-2 flex items-center justify-center">
-                          <span className="text-xl">🥈</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex-1" />
-                    )}
-
-                    {/* 1º Lugar (Centro) */}
-                    {p1 ? (
-                      <div className="flex flex-col items-center flex-1 min-w-0 z-10">
-                        <div className="relative mb-2">
-                          {p1.foto ? (
-                            <img src={p1.foto} alt={p1.nome} className="w-16 h-16 rounded-full object-cover border-4 border-amber-400 ring-4 ring-amber-400/30" />
-                          ) : (
-                            <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-black text-xl border-4 border-amber-400">
-                              {p1.nome[0]}
+                            <span className="text-[10px] font-bold text-slate-700 truncate w-full text-center px-1">{p2.nome}</span>
+                            <span className="text-[9px] font-semibold text-slate-500">{p2.jogosGanhos || 0} Vit.</span>
+                            <div className="w-full bg-gradient-to-t from-slate-100 to-slate-50 border-t border-slate-300 h-12 rounded-t-lg mt-2 flex items-center justify-center">
+                              <span className="text-xl">🥈</span>
                             </div>
-                          )}
-                          <div className="absolute -top-4 -right-1.5 bg-amber-400 text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shadow-md">1</div>
-                        </div>
-                        <span className="text-xs font-black text-slate-950 truncate w-full text-center px-1">{p1.nome}</span>
-                        <span className="text-[10px] font-black text-amber-600">{p1.jogosGanhos || 0} Vit.</span>
-                        <div className="w-full bg-gradient-to-t from-amber-50 to-amber-100/60 border-t-2 border-amber-400 h-16 rounded-t-xl mt-2 flex items-center justify-center shadow-lg shadow-amber-300/10">
-                          <span className="text-2xl">👑</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex-1" />
-                    )}
-
-                    {/* 3º Lugar (Direita) */}
-                    {p3 ? (
-                      <div className="flex flex-col items-center flex-1 min-w-0">
-                        <div className="relative mb-2">
-                          {p3.foto ? (
-                            <img src={p3.foto} alt={p3.nome} className="w-10 h-10 rounded-full object-cover border-2 border-amber-700 ring-2 ring-amber-700/25" />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-900 flex items-center justify-center font-bold text-xs border-2 border-amber-700">
-                              {p3.nome[0]}
-                            </div>
-                          )}
-                          <div className="absolute -top-3 -right-2 bg-amber-700 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">3</div>
-                        </div>
-                        <span className="text-[10px] font-bold text-slate-700 truncate w-full text-center px-1">{p3.nome}</span>
-                        <span className="text-[9px] font-semibold text-slate-500">{p3.jogosGanhos || 0} Vit.</span>
-                        <div className="w-full bg-gradient-to-t from-amber-900/10 to-amber-900/5 border-t border-amber-700 h-8 rounded-t-lg mt-2 flex items-center justify-center">
-                          <span className="text-lg">🥉</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex-1" />
-                    )}
-                  </div>
-
-                  {/* Restante da Tabela */}
-                  {rest.length > 0 && (
-                    <div className="bg-slate-50 rounded-xl p-3 max-h-[160px] overflow-y-auto space-y-1.5 border border-slate-100 w-full">
-                      {rest.map((player, idx) => (
-                        <div key={player.id} className="flex items-center justify-between py-1.5 px-2.5 bg-white rounded-lg border border-slate-100 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-400">#{idx + 4}</span>
-                            <span className="font-bold text-slate-700">{player.nome}</span>
                           </div>
-                          <span className="font-extrabold text-slate-500 text-[10px]">{player.jogosGanhos || 0} vitórias</span>
+                        ) : (
+                          <div className="flex-1" />
+                        )}
+
+                        {/* 1º Lugar (Centro) */}
+                        {p1 ? (
+                          <div className="flex flex-col items-center flex-1 min-w-0 z-10">
+                            <div className="relative mb-2">
+                              {p1.foto ? (
+                                <img src={p1.foto} alt={p1.nome} className="w-16 h-16 rounded-full object-cover border-4 border-amber-400 ring-4 ring-amber-400/30" />
+                              ) : (
+                                <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-black text-xl border-4 border-amber-400">
+                                  {p1.nome[0]}
+                                </div>
+                              )}
+                              <div className="absolute -top-4 -right-1.5 bg-amber-400 text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shadow-md">1</div>
+                            </div>
+                            <span className="text-xs font-black text-slate-950 truncate w-full text-center px-1">{p1.nome}</span>
+                            <span className="text-[10px] font-black text-amber-600">{p1.jogosGanhos || 0} Vit.</span>
+                            <div className="w-full bg-gradient-to-t from-amber-50 to-amber-100/60 border-t-2 border-amber-400 h-16 rounded-t-xl mt-2 flex items-center justify-center shadow-lg shadow-amber-300/10">
+                              <span className="text-2xl">👑</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex-1" />
+                        )}
+
+                        {/* 3º Lugar (Direita) */}
+                        {p3 ? (
+                          <div className="flex flex-col items-center flex-1 min-w-0">
+                            <div className="relative mb-2">
+                              {p3.foto ? (
+                                <img src={p3.foto} alt={p3.nome} className="w-10 h-10 rounded-full object-cover border-2 border-amber-700 ring-2 ring-amber-700/25" />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-900 flex items-center justify-center font-bold text-xs border-2 border-amber-700">
+                                  {p3.nome[0]}
+                                </div>
+                              )}
+                              <div className="absolute -top-3 -right-2 bg-amber-700 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">3</div>
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-700 truncate w-full text-center px-1">{p3.nome}</span>
+                            <span className="text-[9px] font-semibold text-slate-500">{p3.jogosGanhos || 0} Vit.</span>
+                            <div className="w-full bg-gradient-to-t from-amber-900/10 to-amber-900/5 border-t border-amber-700 h-8 rounded-t-lg mt-2 flex items-center justify-center">
+                              <span className="text-lg">🥉</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex-1" />
+                        )}
+                      </div>
+
+                      {/* Restante da Tabela */}
+                      {rest.length > 0 && (
+                        <div className="bg-slate-50 rounded-xl p-3 max-h-[160px] overflow-y-auto space-y-1.5 border border-slate-100 w-full">
+                          {rest.map((player, idx) => (
+                            <div key={player.id} className="flex items-center justify-between py-1.5 px-2.5 bg-white rounded-lg border border-slate-100 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-400">#{idx + 4}</span>
+                                <span className="font-bold text-slate-700">{player.nome}</span>
+                              </div>
+                              <span className="font-extrabold text-slate-500 text-[10px]">{player.jogosGanhos || 0} vitórias</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            ) : (
+              /* PASSO 2: TIME DOS SONHOS E TIME PESADELO */
+              <div id="ranking-highlights-content" className="flex flex-col space-y-4 text-center w-full">
+                {/* Header */}
+                <div>
+                  <span className="text-2xl">✨</span>
+                  <h2 className="text-lg font-black text-slate-900 uppercase mt-1">Destaques do Evento</h2>
+                  <p className="text-[10px] font-bold text-slate-450 uppercase tracking-widest">{evento?.descricao}</p>
+                </div>
+
+                {/* Content columns */}
+                {(() => {
+                  const ranked = [...participantes].sort((a, b) => {
+                    const vA = a.jogosGanhos || 0;
+                    const vB = b.jogosGanhos || 0;
+                    const dA = (a.jogos || 0) - vA;
+                    const dB = (b.jogos || 0) - vB;
+                    if (vB !== vA) return vB - vA;
+                    return dA - dB;
+                  });
+
+                  // Dream Team: top 6 (ou metade dos jogadores se total < 12)
+                  const limit = Math.min(6, Math.ceil(ranked.length / 2));
+                  const dreamTeam = ranked.slice(0, limit);
+
+                  // Nightmare Team: bottom 6 (ou metade de baixo)
+                  const nightmareLimit = Math.min(6, Math.floor(ranked.length / 2));
+                  const nightmareTeam = [...ranked].reverse().slice(0, nightmareLimit);
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Time dos Sonhos */}
+                      <div className="p-3.5 bg-gradient-to-br from-amber-50 to-amber-100/35 border border-amber-300 rounded-2xl text-left space-y-2 shadow-sm">
+                        <h3 className="text-xs font-black text-amber-600 uppercase tracking-wider flex items-center gap-1.5 border-b border-amber-200 pb-1.5">
+                          <Crown size={14} className="text-amber-500" />
+                          Time dos Sonhos
+                        </h3>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {dreamTeam.map((p, idx) => (
+                            <div key={p.id} className="flex justify-between items-center bg-white/80 py-1.5 px-2.5 rounded-lg text-[10px] border border-amber-150">
+                              <span className="font-bold text-slate-700 truncate pr-1">
+                                #{idx + 1} {p.nome}
+                              </span>
+                              <span className="text-amber-600 font-extrabold flex-shrink-0">
+                                {p.jogosGanhos || 0} Vit.
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Time Pesadelo */}
+                      <div className="p-3.5 bg-gradient-to-br from-slate-100 to-slate-200/50 border border-slate-350 rounded-2xl text-left space-y-2 shadow-sm">
+                        <h3 className="text-xs font-black text-slate-550 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-300 pb-1.5">
+                          <Skull size={14} className="text-slate-500" />
+                          Time Pesadelo
+                        </h3>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {nightmareTeam.map((p, idx) => (
+                            <div key={p.id} className="flex justify-between items-center bg-white/80 py-1.5 px-2.5 rounded-lg text-[10px] border border-slate-200">
+                              <span className="font-bold text-slate-700 truncate pr-1">
+                                #{ranked.length - idx} {p.nome}
+                              </span>
+                              <span className="text-slate-500 font-semibold flex-shrink-0">
+                                {p.jogosGanhos || 0} Vit.
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </>
-              );
-            })()}
+                  );
+                })()}
+              </div>
+            )}
 
             {/* Botões de Ação */}
-            <div className="flex gap-2 w-full">
+            <div className="flex gap-2 w-full pt-1.5">
               <button
                 onClick={handleCompartilharRanking}
                 className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all text-xs flex justify-center items-center gap-1.5 cursor-pointer border-0"
@@ -1909,15 +2012,25 @@ export default function EventoDetails() {
                 <Share2 size={15} />
                 <span>Compartilhar</span>
               </button>
-              <button
-                onClick={() => {
-                  setShowPodium(false);
-                  navigate('/');
-                }}
-                className="flex-1 py-3 bg-[#eb3237] hover:bg-red-650 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center border-0"
-              >
-                Ir para a Home
-              </button>
+
+              {podiumStep === 1 ? (
+                <button
+                  onClick={() => setPodiumStep(2)}
+                  className="flex-1 py-3 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center border-0"
+                >
+                  Avançar
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowPodium(false);
+                    navigate('/');
+                  }}
+                  className="flex-1 py-3 bg-[#eb3237] hover:bg-red-650 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center border-0"
+                >
+                  Ir para a Home
+                </button>
+              )}
             </div>
           </div>
         </div>
