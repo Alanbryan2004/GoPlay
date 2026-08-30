@@ -451,6 +451,51 @@ export default function EventoDetails() {
     }, 80);
   };
 
+  // Reequilibrar os jogadores em quadra de forma equilibrada pelas estrelas (serpentina)
+  const handleReequilibrarTimes = () => {
+    const ativos = [...time1, ...time2];
+    if (ativos.length === 0) return;
+
+    // Sorteia os ativos em 2 times do tamanho configurado
+    const resultado = sortearTimes(ativos, config.numberOfPlayers, 2);
+    const t1 = resultado[0] || [];
+    const t2 = resultado[1] || [];
+
+    t1.sort((a, b) => a.nome.localeCompare(b.nome));
+    t2.sort((a, b) => a.nome.localeCompare(b.nome));
+
+    // Iniciar animação do reequilíbrio!
+    setIsDrawing(true);
+    let count = 0;
+    const interval = setInterval(() => {
+      const randomPlayer = ativos[Math.floor(Math.random() * ativos.length)];
+      if (randomPlayer) {
+        setShuffleName(randomPlayer.nome);
+      }
+      count++;
+      if (count >= 25) { // 2 segundos (25 * 80ms)
+        clearInterval(interval);
+        setIsDrawing(false);
+
+        // Garantir prioridades zeradas para os jogadores que continuam jogando
+        const activeT1 = t1.map((p) => ({ ...p, prioridade: 0 }));
+        const activeT2 = t2.map((p) => ({ ...p, prioridade: 0 }));
+
+        setTime1(activeT1);
+        setTime2(activeT2);
+        setPlacarTime1(0);
+        setPlacarTime2(0);
+
+        updateDatabase({
+          time1: activeT1,
+          time2: activeT2,
+          vitorias_time1: vitoriasTime1,
+          vitorias_time2: vitoriasTime2
+        });
+      }
+    }, 80);
+  };
+
   // Iniciar partida com os times sorteados
   const handleIniciarJogo = (t1: Participante[], t2: Participante[]) => {
     const activeT1 = t1.map((p) => ({ ...p, prioridade: 0 }));
@@ -966,14 +1011,25 @@ export default function EventoDetails() {
             </div>
           </div>
 
-          <button
-            onClick={handleFinalizarJogo}
-            disabled={placarTime1 === placarTime2}
-            className="w-full py-3 bg-gradient-to-r from-red-600 to-red-750 hover:from-red-600 hover:to-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg active:scale-98 transition-all text-xs flex justify-center items-center gap-1.5"
-          >
-            <CheckCircle size={16} />
-            <span>Finalizar Partida</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleFinalizarJogo}
+              disabled={placarTime1 === placarTime2}
+              className="flex-1 py-3 bg-gradient-to-r from-red-600 to-red-750 hover:from-red-600 hover:to-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg active:scale-98 transition-all text-xs flex justify-center items-center gap-1.5"
+            >
+              <CheckCircle size={16} />
+              <span>Finalizar Partida</span>
+            </button>
+
+            <button
+              onClick={handleReequilibrarTimes}
+              className="px-4 py-3 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold rounded-xl shadow-md active:scale-98 transition-all text-xs flex justify-center items-center gap-1.5"
+              title="Reequilibrar os 12 em quadra pelas estrelas"
+            >
+              <RefreshCw size={14} className="text-red-500" />
+              <span>Reequilibrar</span>
+            </button>
+          </div>
         </div>
       )}
 
