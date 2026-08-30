@@ -143,17 +143,21 @@ export default function Header() {
                   <User size={12} />
                 </div>
               )}
-              <div className="flex flex-col min-w-0">
+              <div className="flex flex-col min-w-0 flex-1">
                 <span className="font-bold text-slate-800 text-[11px] leading-tight line-clamp-1">{userName}</span>
-                <span className="text-[8px] font-bold text-red-500 uppercase tracking-wider truncate mt-0.5" title={userModalidades}>
-                  {userModalidades 
-                    ? `${userModalidades} ${
-                        userRating !== null 
-                          ? '★'.repeat(Math.min(5, Math.max(0, Math.round(userRating)))) + '☆'.repeat(5 - Math.min(5, Math.max(0, Math.round(userRating)))) 
-                          : ''
-                      }` 
-                    : 'Jogador'}
-                </span>
+                <div className="flex items-center gap-1.5 mt-0.5 min-w-0" title={userModalidades}>
+                  <span className="text-[8px] font-bold text-red-500 uppercase tracking-wider truncate flex-1">
+                    {userModalidades || 'Jogador'}
+                  </span>
+                  {userModalidades && userRating !== null && (
+                    <span className="text-[8px] font-black text-amber-500 tracking-normal shrink-0">
+                      {'★'.repeat(Math.min(5, Math.max(0, Math.round(userRating))))}
+                      <span className="text-slate-350 font-normal">
+                        {'☆'.repeat(5 - Math.min(5, Math.max(0, Math.round(userRating))))}
+                      </span>
+                    </span>
+                  )}
+                </div>
               </div>
             </button>
           </div>
