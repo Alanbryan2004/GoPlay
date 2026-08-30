@@ -917,9 +917,19 @@ export default function EventoDetails() {
           {/* Fundo decorativo sutil com efeito gradiente de partida ativa */}
           <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-red-500 via-fuchsia-500 to-cyan-500" />
           
-          <h2 className="text-center font-black text-xs uppercase tracking-widest text-red-400">
-            Partida Ativa
-          </h2>
+          <div className="flex justify-between items-center">
+            <h2 className="font-black text-xs uppercase tracking-widest text-red-400">
+              Partida Ativa
+            </h2>
+            <button
+              onClick={handleReequilibrarTimes}
+              className="px-2.5 py-1 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-slate-650 rounded-lg transition-all active:scale-95 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-wider cursor-pointer shadow-sm"
+              title="Reequilibrar os jogadores em quadra pelas estrelas"
+            >
+              <RefreshCw size={10} className="text-red-500" />
+              <span>Reequilibrar</span>
+            </button>
+          </div>
 
           <div className="grid grid-cols-5 items-center">
             {/* Time 1 */}
@@ -1011,25 +1021,14 @@ export default function EventoDetails() {
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={handleFinalizarJogo}
-              disabled={placarTime1 === placarTime2}
-              className="flex-1 py-3 bg-gradient-to-r from-red-600 to-red-750 hover:from-red-600 hover:to-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg active:scale-98 transition-all text-xs flex justify-center items-center gap-1.5"
-            >
-              <CheckCircle size={16} />
-              <span>Finalizar Partida</span>
-            </button>
-
-            <button
-              onClick={handleReequilibrarTimes}
-              className="px-4 py-3 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-slate-700 font-bold rounded-xl shadow-md active:scale-98 transition-all text-xs flex justify-center items-center gap-1.5"
-              title="Reequilibrar os 12 em quadra pelas estrelas"
-            >
-              <RefreshCw size={14} className="text-red-500" />
-              <span>Reequilibrar</span>
-            </button>
-          </div>
+          <button
+            onClick={handleFinalizarJogo}
+            disabled={placarTime1 === placarTime2}
+            className="w-full py-3 bg-gradient-to-r from-red-600 to-red-750 hover:from-red-600 hover:to-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg active:scale-98 transition-all text-xs flex justify-center items-center gap-1.5"
+          >
+            <CheckCircle size={16} />
+            <span>Finalizar Partida</span>
+          </button>
         </div>
       )}
 
