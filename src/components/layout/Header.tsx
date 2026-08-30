@@ -146,7 +146,13 @@ export default function Header() {
               <div className="flex flex-col min-w-0">
                 <span className="font-bold text-slate-800 text-[11px] leading-tight line-clamp-1">{userName}</span>
                 <span className="text-[8px] font-bold text-red-500 uppercase tracking-wider truncate mt-0.5" title={userModalidades}>
-                  {userModalidades ? `${userModalidades} ${userRating !== null ? `(${userRating.toFixed(1)} ★)` : ''}` : 'Jogador'}
+                  {userModalidades 
+                    ? `${userModalidades} ${
+                        userRating !== null 
+                          ? '★'.repeat(Math.min(5, Math.max(0, Math.round(userRating)))) + '☆'.repeat(5 - Math.min(5, Math.max(0, Math.round(userRating)))) 
+                          : ''
+                      }` 
+                    : 'Jogador'}
                 </span>
               </div>
             </button>
