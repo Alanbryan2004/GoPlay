@@ -17,6 +17,8 @@ export default function RankingList() {
   const [modalidades, setModalidades] = useState<Modalidade[]>([]);
   const [selectedGrupoId, setSelectedGrupoId] = useState<string>('');
   const [selectedModalidadeId, setSelectedModalidadeId] = useState<string>('');
+  // IDs dos grupos que o usuário participa (usado para filtrar ranking geral)
+  const [allowedGroupIds, setAllowedGroupIds] = useState<string[]>([]);
 
   useEffect(() => {
     fetchFilters();
@@ -25,17 +27,57 @@ export default function RankingList() {
 
   useEffect(() => {
     fetchRanking();
-  }, [selectedGrupoId, selectedModalidadeId]);
+  }, [selectedGrupoId, selectedModalidadeId, allowedGroupIds]);
 
   const fetchFilters = async () => {
     try {
-      // 1. Buscar Grupos
-      const { data: dbGrupos } = await supabase.from('grupos').select('*');
-      if (dbGrupos) setGrupos(dbGrupos);
+      // 1. Buscar o usuário logado
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-      // 2. Buscar Modalidades
-      const { data: dbModalidades } = await supabase.from('modalidades').select('*');
-      if (dbModalidades) setModalidades(dbModalidades);
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('email', user.email)
+        .single();
+      const loggedId = userData?.id || user.id;
+
+      // 2. Buscar apenas os grupos em que o usuário é membro aprovado
+      const { data: membroData } = await supabase
+        .from('membros_grupo')
+        .select('grupo_id, grupos(id, nome)')
+        .eq('usuario_id', loggedId)
+        .eq('status', 'aprovado');
+
+      if (membroData) {
+        const parsedGrupos = membroData
+          .map((m: any) => m.grupos)
+          .filter(Boolean) as Grupo[];
+        setGrupos(parsedGrupos);
+        const ids = parsedGrupos.map((g) => g.id);
+        setAllowedGroupIds(ids);
+      }
+
+      // 3. Buscar apenas as modalidades em que o usuário possui rating (participação real)
+      const { data: ratingData } = await supabase
+        .from('ratings_jogador')
+        .select('modalidade_id, modalidades(id, nome)')
+        .eq('usuario_id', loggedId);
+
+      if (ratingData && ratingData.length > 0) {
+        // Deduplica por id de modalidade
+        const modalidadeMap = new Map<string, Modalidade>();
+        ratingData.forEach((r: any) => {
+          if (r.modalidades) {
+            modalidadeMap.set(r.modalidades.id, r.modalidades as Modalidade);
+          }
+        });
+        setModalidades(Array.from(modalidadeMap.values()));
+      } else {
+        // Fallback: carregar todas as modalidades se o usuário não tiver ratings ainda
+        const { data: dbModalidades } = await supabase.from('modalidades').select('*');
+        if (dbModalidades) setModalidades(dbModalidades as Modalidade[]);
+      }
     } catch (e) {
       console.error('Erro ao carregar filtros de classificação:', e);
     }
@@ -100,7 +142,11 @@ export default function RankingList() {
       // 2. Obter eventos com base nos filtros selecionados
       let query = supabase.from('eventos').select('grupo_id, modalidade_id, participantes');
       if (selectedGrupoId) {
+        // Filtro por grupo específico selecionado
         query = query.eq('grupo_id', selectedGrupoId);
+      } else if (allowedGroupIds.length > 0) {
+        // Sem grupo específico: filtrar apenas pelos grupos que o usuário participa
+        query = query.in('grupo_id', allowedGroupIds);
       }
       if (selectedModalidadeId) {
         query = query.eq('modalidade_id', selectedModalidadeId);

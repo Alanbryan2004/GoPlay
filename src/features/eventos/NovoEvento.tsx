@@ -31,12 +31,17 @@ export default function NovoEvento() {
   const [grupoNome, setGrupoNome] = useState('');
 
   useEffect(() => {
-    fetchModalidades();
-    if (grupoId) {
-      setIsPublico(false);
-      setSelectedGrupoId(grupoId);
-      fetchGrupoNome(grupoId);
-    }
+    fetchModalidades().then(() => {
+      // Após carregar modalidades, buscar a padrão com base no último evento
+      if (grupoId) {
+        setIsPublico(false);
+        setSelectedGrupoId(grupoId);
+        fetchGrupoNome(grupoId);
+        fetchDefaultModality(grupoId);
+      } else {
+        fetchDefaultModality(null);
+      }
+    });
   }, [grupoId]);
 
   const fetchGrupoNome = async (gid: string) => {
@@ -51,6 +56,28 @@ export default function NovoEvento() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  // Busca a modalidade do último evento criado no grupo (ou geral) e define como padrão
+  const fetchDefaultModality = async (gid: string | null) => {
+    try {
+      let query = supabase
+        .from('eventos')
+        .select('modalidade_id')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (gid) {
+        query = query.eq('grupo_id', gid);
+      }
+
+      const { data } = await query;
+      if (data && data.length > 0 && data[0].modalidade_id) {
+        setModalidadeId(data[0].modalidade_id);
+      }
+    } catch (e) {
+      console.error('Erro ao buscar modalidade padrão:', e);
     }
   };
 
@@ -251,16 +278,11 @@ export default function NovoEvento() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!grupoId) {
-                        setIsPublico(true);
-                      }
-                    }}
-                    disabled={!!grupoId}
+                    onClick={() => setIsPublico(true)}
                     className={`py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       isPublico
                         ? 'bg-red-650 border-red-500 text-white shadow-md'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     <span>🌍 Público</span>
