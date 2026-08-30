@@ -156,8 +156,8 @@ export default function NovoEvento() {
   };
 
   return (
-    <div className="p-6 pb-24 w-full max-w-md mx-auto">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="px-4 py-2 pb-20 w-full max-w-md mx-auto">
+      <div className="flex items-center gap-3 mb-3">
         <button
           onClick={() => navigate(-1)}
           className="p-2 rounded-lg bg-slate-50 hover:bg-slate-200 text-slate-700 transition-colors"
@@ -167,14 +167,14 @@ export default function NovoEvento() {
         <h1 className="text-2xl font-extrabold text-slate-900">Novo Evento</h1>
       </div>
 
-      <div className="glass p-6 rounded-2xl shadow-xl">
+      <div className="glass p-4 rounded-2xl shadow-md">
         {erro && (
           <div className="flex items-center gap-2 mb-4 p-3 bg-red-950/40 border border-red-500/30 text-red-700 rounded-xl text-sm">
             <span>{erro}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
             <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
               Descrição / Nome da Partida

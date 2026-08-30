@@ -37,8 +37,15 @@ export default function Header() {
     navigate('/login');
   };
 
-  // Se for a rota de login, não exibe o menu lateral flutuante
-  if (location.pathname === '/login') return null;
+  // Exibir a Sidebar apenas nas rotas principais do menu
+  const showSidebar = 
+    location.pathname === '/' ||
+    location.pathname === '/eventos' ||
+    location.pathname === '/grupos' ||
+    location.pathname === '/ranking' ||
+    location.pathname === '/amigos';
+
+  if (!showSidebar) return null;
 
   return (
     <>
