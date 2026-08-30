@@ -63,6 +63,8 @@ export default function EventoDetails() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [shuffleName, setShuffleName] = useState('');
   const [showPodium, setShowPodium] = useState(false);
+  const [showSubstituirModal, setShowSubstituirModal] = useState(false);
+  const [substituirTarget, setSubstituirTarget] = useState<{ timeIndex: 1 | 2; slotIndex: number } | null>(null);
   const [dialog, setDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -554,6 +556,35 @@ export default function EventoDetails() {
     }
   };
 
+  // Adicionar jogador da fila ao time ativo no campo (substituição)
+  const handleAdicionarJogadorAoTimeAtivo = (timeIndex: 1 | 2, jogador: Participante) => {
+    // 1. Garantir prioridade zero na lista global de participantes
+    const novosParticipantes = participantes.map((p) => {
+      if (p.id === jogador.id) {
+        return { ...p, prioridade: 0 };
+      }
+      return p;
+    });
+    setParticipantes(novosParticipantes);
+
+    const jogadorComPrio0 = { ...jogador, prioridade: 0 };
+
+    if (timeIndex === 1) {
+      const novoTime1 = [...time1, jogadorComPrio0];
+      novoTime1.sort((a, b) => a.nome.localeCompare(b.nome));
+      setTime1(novoTime1);
+      updateDatabase({ time1: novoTime1, participantes: novosParticipantes });
+    } else {
+      const novoTime2 = [...time2, jogadorComPrio0];
+      novoTime2.sort((a, b) => a.nome.localeCompare(b.nome));
+      setTime2(novoTime2);
+      updateDatabase({ time2: novoTime2, participantes: novosParticipantes });
+    }
+
+    setShowSubstituirModal(false);
+    setSubstituirTarget(null);
+  };
+
   // Finalizar Partida
   const handleFinalizarJogo = () => {
     if (placarTime1 === placarTime2) return;
@@ -836,6 +867,9 @@ export default function EventoDetails() {
     (p) => p.checked && !time1.some((t) => t.id === p.id) && !time2.some((t) => t.id === p.id)
   );
 
+  const emptySlots1 = Math.max(0, config.numberOfPlayers - time1.length);
+  const emptySlots2 = Math.max(0, config.numberOfPlayers - time2.length);
+
   // Ordenar fila usando a prioridade real (N menor primeiro, depois ordem alfabética)
   const filaOrdenada = [...jogadoresFila].sort((a, b) => {
     const pA = a.prioridade || 0;
@@ -1000,6 +1034,19 @@ export default function EventoDetails() {
                   </button>
                 </div>
               ))}
+              {Array.from({ length: emptySlots1 }).map((_, idx) => (
+                <button
+                  key={`empty-t1-${idx}`}
+                  onClick={() => {
+                    setSubstituirTarget({ timeIndex: 1, slotIndex: idx });
+                    setShowSubstituirModal(true);
+                  }}
+                  className="w-full py-1.5 px-2 border border-dashed border-red-300 rounded-lg text-left text-[10px] font-bold text-red-500 hover:bg-red-100/50 transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <UserPlus size={10} />
+                  <span>Vaga Disponível</span>
+                </button>
+              ))}
             </div>
 
             {/* Jogadores Time 2 */}
@@ -1017,6 +1064,19 @@ export default function EventoDetails() {
                     <X size={12} />
                   </button>
                 </div>
+              ))}
+              {Array.from({ length: emptySlots2 }).map((_, idx) => (
+                <button
+                  key={`empty-t2-${idx}`}
+                  onClick={() => {
+                    setSubstituirTarget({ timeIndex: 2, slotIndex: idx });
+                    setShowSubstituirModal(true);
+                  }}
+                  className="w-full py-1.5 px-2 border border-dashed border-blue-300 rounded-lg text-left text-[10px] font-bold text-blue-500 hover:bg-blue-100/50 transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <UserPlus size={10} />
+                  <span>Vaga Disponível</span>
+                </button>
               ))}
             </div>
           </div>
@@ -1514,6 +1574,90 @@ export default function EventoDetails() {
                 Iniciar Partida
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Substituição */}
+      {showSubstituirModal && substituirTarget && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 flex flex-col space-y-4 max-h-[80vh] overflow-hidden">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <UserPlus size={16} className="text-red-500" />
+                Preencher Vaga - {substituirTarget.timeIndex === 1 ? 'Time A' : 'Time B'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowSubstituirModal(false);
+                  setSubstituirTarget(null);
+                }} 
+                className="text-slate-450 hover:text-slate-650 cursor-pointer border-0 bg-transparent"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {jogadoresFila.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-4">
+                  Nenhum jogador disponível na fila de espera. Marque novos jogadores na lista de presentes.
+                </p>
+              ) : (
+                <>
+                  {/* Opção Recomendada (Próximo da fila por prioridade N) */}
+                  {filaOrdenada.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-black uppercase text-red-500 tracking-wider">
+                        Próximo da fila (Recomendado)
+                      </span>
+                      <button
+                        onClick={() => handleAdicionarJogadorAoTimeAtivo(substituirTarget.timeIndex, filaOrdenada[0])}
+                        className="w-full p-3 rounded-xl border border-red-200 bg-red-50/50 hover:bg-red-50 text-left transition-all flex items-center justify-between cursor-pointer"
+                      >
+                        <span className="text-xs font-bold text-red-700">
+                          {filaOrdenada[0].nome}
+                        </span>
+                        <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">
+                          Prio {filaOrdenada[0].prioridade || 0}
+                        </span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Lista de Seleção Manual */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                      Selecionar jogador manualmente
+                    </span>
+                    <div className="grid gap-1.5">
+                      {filaOrdenada.map((jogador) => (
+                        <button
+                          key={jogador.id}
+                          onClick={() => handleAdicionarJogadorAoTimeAtivo(substituirTarget.timeIndex, jogador)}
+                          className="w-full p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-left transition-all flex items-center justify-between cursor-pointer text-slate-800"
+                        >
+                          <span className="text-xs font-semibold">{jogador.nome}</span>
+                          <span className="text-[10px] text-slate-500">
+                            Prio {jogador.prioridade || 0}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                setShowSubstituirModal(false);
+                setSubstituirTarget(null);
+              }}
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer border-0"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       )}
