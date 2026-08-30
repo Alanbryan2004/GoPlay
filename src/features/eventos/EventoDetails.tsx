@@ -173,11 +173,35 @@ export default function EventoDetails() {
           table: 'eventos',
           filter: `id=eq.${id}`,
         },
-        (payload: any) => {
+        async (payload: any) => {
           if (payload.new && !skipDbUpdate.current) {
             const ev = payload.new as Evento;
             setEvento(ev);
-            setParticipantes(ev.participantes || []);
+
+            let loadedParticipantes = ev.participantes || [];
+            if (!ev.configuracao?.finalizado && ev.grupo_id && ev.modalidade_id && loadedParticipantes.length > 0) {
+              try {
+                const { data: dbRatings } = await supabase
+                  .from('ratings_jogador')
+                  .select('usuario_id, rating')
+                  .eq('grupo_id', ev.grupo_id)
+                  .eq('modalidade_id', ev.modalidade_id);
+
+                if (dbRatings) {
+                  loadedParticipantes = loadedParticipantes.map((p: any) => {
+                    const rRow = dbRatings.find((r) => r.usuario_id === p.id);
+                    if (rRow) {
+                      return { ...p, avaliacao: Number(rRow.rating) };
+                    }
+                    return p;
+                  });
+                }
+              } catch (e) {
+                console.error('Erro ao sincronizar estrelas dos participantes via realtime:', e);
+              }
+            }
+
+            setParticipantes(loadedParticipantes);
             setTime1(ev.time1 || []);
             setTime2(ev.time2 || []);
             setVitoriasTime1(ev.vitorias_time1 || 0);
@@ -204,7 +228,31 @@ export default function EventoDetails() {
 
       if (!error && data) {
         setEvento(data as Evento);
-        setParticipantes(data.participantes || []);
+
+        let loadedParticipantes = data.participantes || [];
+        if (!data.configuracao?.finalizado && data.grupo_id && data.modalidade_id && loadedParticipantes.length > 0) {
+          try {
+            const { data: dbRatings } = await supabase
+              .from('ratings_jogador')
+              .select('usuario_id, rating')
+              .eq('grupo_id', data.grupo_id)
+              .eq('modalidade_id', data.modalidade_id);
+
+            if (dbRatings) {
+              loadedParticipantes = loadedParticipantes.map((p: any) => {
+                const rRow = dbRatings.find((r) => r.usuario_id === p.id);
+                if (rRow) {
+                  return { ...p, avaliacao: Number(rRow.rating) };
+                }
+                return p;
+              });
+            }
+          } catch (e) {
+            console.error('Erro ao sincronizar estrelas dos participantes no fetch:', e);
+          }
+        }
+
+        setParticipantes(loadedParticipantes);
         setTime1(data.time1 || []);
         setTime2(data.time2 || []);
         setVitoriasTime1(data.vitorias_time1 || 0);
@@ -294,13 +342,32 @@ export default function EventoDetails() {
   };
 
   // Adicionar jogador a partir do autocomplete (cadastrado)
-  const handleSelectSugestao = (user: any) => {
+  const handleSelectSugestao = async (user: any) => {
+    let rating = 3;
+    if (evento?.grupo_id && evento?.modalidade_id) {
+      try {
+        const { data: ratingRow } = await supabase
+          .from('ratings_jogador')
+          .select('rating')
+          .eq('usuario_id', user.id)
+          .eq('grupo_id', evento.grupo_id)
+          .eq('modalidade_id', evento.modalidade_id)
+          .maybeSingle();
+
+        if (ratingRow) {
+          rating = Number(ratingRow.rating);
+        }
+      } catch (e) {
+        console.error('Erro ao buscar nota do jogador na tabela ratings_jogador:', e);
+      }
+    }
+
     const novoJogador: Participante = {
       id: user.id, // ID real do usuário no Supabase!
       nome: user.nome,
       foto: user.foto || '',
       checked: true,
-      avaliacao: 3,
+      avaliacao: rating,
       prioridade: 0,
       jogos: 0,
       jogosGanhos: 0,
@@ -593,13 +660,76 @@ export default function EventoDetails() {
       onConfirm: async () => {
         setDialog((prev) => ({ ...prev, isOpen: false }));
         try {
+          // 1. Calcular e atualizar ratings dos jogadores
+          let updatedParticipantes = [...participantes];
+          if (evento?.grupo_id && evento?.modalidade_id) {
+            const ranked = [...participantes].sort((a, b) => {
+              const vA = a.vitorias || 0;
+              const vB = b.vitorias || 0;
+              const dA = a.derrotas || 0;
+              const dB = b.derrotas || 0;
+              if (vB !== vA) return vB - vA;
+              return dA - dB;
+            });
+
+            const numGanhadores = Math.min(6, Math.floor(ranked.length / 3));
+            const numPerdedores = numGanhadores;
+
+            for (let i = 0; i < ranked.length; i++) {
+              const p = ranked[i];
+              // Verificar se é cadastrado no sistema
+              const isCadastrado = todasPessoas.some((u) => u.id === p.id);
+              if (!isCadastrado) continue;
+
+              // Determinar o ajuste de rating
+              let delta = 0;
+              if (i < numGanhadores) {
+                delta = 0.5;
+              } else if (i >= ranked.length - numPerdedores) {
+                delta = -0.5;
+              }
+
+              // Buscar o rating atual dele para este grupo e esporte
+              const { data: ratingRow } = await supabase
+                .from('ratings_jogador')
+                .select('rating')
+                .eq('usuario_id', p.id)
+                .eq('grupo_id', evento.grupo_id)
+                .eq('modalidade_id', evento.modalidade_id)
+                .maybeSingle();
+
+              let currentRating = ratingRow ? Number(ratingRow.rating) : 3.0;
+              let newRating = currentRating + delta;
+              newRating = Math.min(5.0, Math.max(1.0, newRating));
+
+              // Salvar no banco (UPSERT)
+              await supabase.from('ratings_jogador').upsert({
+                usuario_id: p.id,
+                grupo_id: evento.grupo_id,
+                modalidade_id: evento.modalidade_id,
+                rating: newRating,
+              });
+
+              // Atualizar na lista local também
+              const pIndex = updatedParticipantes.findIndex((part) => part.id === p.id);
+              if (pIndex !== -1) {
+                updatedParticipantes[pIndex].avaliacao = newRating;
+              }
+            }
+          }
+
+          // 2. Finalizar evento e salvar participantes consolidados
           const updatedConfig = { ...config, finalizado: true };
           const { error } = await supabase
             .from('eventos')
-            .update({ configuracao: updatedConfig })
+            .update({ 
+              configuracao: updatedConfig,
+              participantes: updatedParticipantes
+            })
             .eq('id', id);
           if (error) throw error;
           
+          setParticipantes(updatedParticipantes);
           setShowConfig(false);
           setShowPodium(true); // Exibe o Pódio antes de ir embora!
         } catch (err: any) {

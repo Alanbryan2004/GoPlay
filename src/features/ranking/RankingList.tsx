@@ -109,6 +109,21 @@ export default function RankingList() {
       const { data: events, error: eventError } = await query;
       if (eventError) throw eventError;
 
+      // 3. Obter ratings_jogador se estiver totalmente filtrado (por grupo e modalidade)
+      let ratingRows: any[] = [];
+      if (selectedGrupoId && selectedModalidadeId) {
+        try {
+          const { data: dbRatings } = await supabase
+            .from('ratings_jogador')
+            .select('usuario_id, rating')
+            .eq('grupo_id', selectedGrupoId)
+            .eq('modalidade_id', selectedModalidadeId);
+          if (dbRatings) ratingRows = dbRatings;
+        } catch (e) {
+          console.error('Erro ao buscar notas consolidadas da tabela ratings_jogador:', e);
+        }
+      }
+
       if (users && events) {
         // Encontrar nomes de jogadores que participaram de pelo menos uma partida nos eventos filtrados
         const participatedPlayerNames = new Set<string>();
@@ -145,11 +160,20 @@ export default function RankingList() {
               }
             });
 
-            // Calcula a média de rating do jogador naquele contexto (padrão 3.0 se não tiver rating registrado)
-            const mediaRating =
-              ratings.length > 0
-                ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
-                : 3.0;
+            // Calcula a nota (se estiver totalmente filtrado por Grupo + Modalidade, usar a tabela consolidada;
+            // caso contrário, calcula a média histórica das avaliações das partidas como fallback)
+            let mediaRating = 3.0;
+            if (selectedGrupoId && selectedModalidadeId) {
+              const rRow = ratingRows.find((r) => r.usuario_id === user.id);
+              if (rRow) {
+                mediaRating = Number(rRow.rating);
+              }
+            } else {
+              mediaRating =
+                ratings.length > 0
+                  ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
+                  : 3.0;
+            }
 
             return {
               ...user,

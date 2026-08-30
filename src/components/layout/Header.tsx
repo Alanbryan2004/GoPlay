@@ -39,7 +39,26 @@ export default function Header() {
 
   const fetchUserStats = async (name: string) => {
     try {
-      const { data: events, error } = await supabase
+      // 1. Obter o ID do usuário logado
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('email', user.email)
+        .single();
+      
+      if (!userData) return;
+
+      // 2. Buscar os ratings desse jogador em todos os grupos/modalidades
+      const { data: dbRatings } = await supabase
+        .from('ratings_jogador')
+        .select('rating, modalidade_id, modalidades:modalidade_id ( nome )')
+        .eq('usuario_id', userData.id);
+
+      // 3. Buscar os eventos (para retrocompatibilidade/fallback de modalidades)
+      const { data: events } = await supabase
         .from('eventos')
         .select(`
           participantes,
@@ -48,35 +67,53 @@ export default function Header() {
           )
         `);
 
-      if (!error && events) {
-        const ratings: number[] = [];
-        const sports = new Set<string>();
+      const sports = new Set<string>();
+      let totalRatingSum = 0;
+      let ratingCount = 0;
 
+      // Adicionar as modalidades e ratings do ratings_jogador
+      if (dbRatings && dbRatings.length > 0) {
+        dbRatings.forEach((r: any) => {
+          if (r.rating !== null) {
+            totalRatingSum += Number(r.rating);
+            ratingCount++;
+          }
+          const sportName = r.modalidades?.nome;
+          if (sportName) {
+            sports.add(sportName);
+          }
+        });
+      }
+
+      // Buscar também modalidades de eventos antigos em que ele participou (para retrocompatibilidade)
+      if (events) {
         events.forEach((event: any) => {
           if (Array.isArray(event.participantes)) {
             const p = event.participantes.find(
               (part: any) => part.nome?.trim().toLowerCase() === name.trim().toLowerCase()
             );
             if (p) {
-              if (typeof p.avaliacao === 'number') {
-                ratings.push(p.avaliacao);
-              }
               const sportName = event.modalidades?.nome;
               if (sportName) {
                 sports.add(sportName);
               }
+              // Se ratings_jogador estava vazio, vamos preencher usando os eventos
+              if (!dbRatings || dbRatings.length === 0) {
+                if (typeof p.avaliacao === 'number') {
+                  totalRatingSum += p.avaliacao;
+                  ratingCount++;
+                }
+              }
             }
           }
         });
-
-        const avg = ratings.length > 0
-          ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
-          : null;
-
-        setUserRating(avg);
-        const sportsList = Array.from(sports).join(', ');
-        setUserModalidades(sportsList);
       }
+
+      const avg = ratingCount > 0 ? totalRatingSum / ratingCount : null;
+      setUserRating(avg);
+
+      const sportsList = Array.from(sports).join(', ');
+      setUserModalidades(sportsList);
     } catch (e) {
       console.error('Erro ao buscar estatísticas do jogador no header:', e);
     }
