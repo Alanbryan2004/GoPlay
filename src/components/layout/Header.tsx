@@ -8,6 +8,8 @@ export default function Header() {
   const location = useLocation();
   const [userName, setUserName] = useState<string>('');
   const [userAvatar, setUserAvatar] = useState<string>('');
+  const [userModalidades, setUserModalidades] = useState<string>('');
+  const [userRating, setUserRating] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
@@ -24,13 +26,61 @@ export default function Header() {
         if (data && !error) {
           setUserName(data.nome);
           setUserAvatar(data.foto || '');
+          await fetchUserStats(data.nome);
         } else {
-          setUserName(user.user_metadata?.nome || user.email?.split('@')[0] || 'Jogador');
+          const name = user.user_metadata?.nome || user.email?.split('@')[0] || 'Jogador';
+          setUserName(name);
+          await fetchUserStats(name);
         }
       }
     }
     getProfile();
   }, [location.pathname]);
+
+  const fetchUserStats = async (name: string) => {
+    try {
+      const { data: events, error } = await supabase
+        .from('eventos')
+        .select(`
+          participantes,
+          modalidades:modalidade_id (
+            nome
+          )
+        `);
+
+      if (!error && events) {
+        const ratings: number[] = [];
+        const sports = new Set<string>();
+
+        events.forEach((event: any) => {
+          if (Array.isArray(event.participantes)) {
+            const p = event.participantes.find(
+              (part: any) => part.nome?.trim().toLowerCase() === name.trim().toLowerCase()
+            );
+            if (p) {
+              if (typeof p.avaliacao === 'number') {
+                ratings.push(p.avaliacao);
+              }
+              const sportName = event.modalidades?.nome;
+              if (sportName) {
+                sports.add(sportName);
+              }
+            }
+          }
+        });
+
+        const avg = ratings.length > 0
+          ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
+          : null;
+
+        setUserRating(avg);
+        const sportsList = Array.from(sports).join(', ');
+        setUserModalidades(sportsList);
+      }
+    } catch (e) {
+      console.error('Erro ao buscar estatísticas do jogador no header:', e);
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -95,7 +145,9 @@ export default function Header() {
               )}
               <div className="flex flex-col min-w-0">
                 <span className="font-bold text-slate-800 text-[11px] leading-tight line-clamp-1">{userName}</span>
-                <span className="text-[8px] font-semibold text-red-500 uppercase tracking-wider">Jogador</span>
+                <span className="text-[8px] font-bold text-red-500 uppercase tracking-wider truncate mt-0.5" title={userModalidades}>
+                  {userModalidades ? `${userModalidades} ${userRating !== null ? `(${userRating.toFixed(1)} ★)` : ''}` : 'Jogador'}
+                </span>
               </div>
             </button>
           </div>
