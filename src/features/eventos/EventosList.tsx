@@ -35,6 +35,95 @@ export default function EventosList() {
     fetchEventos();
   }, [grupoId]);
 
+  const handleAutoFinalizeEvents = async (pastEvents: Evento[]) => {
+    try {
+      // 1. Obter todos os IDs de usuários registrados no sistema
+      const { data: dbUsers } = await supabase.from('usuarios').select('id');
+      const registeredUserIds = new Set<string>(dbUsers ? dbUsers.map((u) => u.id) : []);
+
+      // 2. Finalizar cada evento em segundo plano
+      for (const ev of pastEvents) {
+        await autoFinalizarSingleEvent(ev, registeredUserIds);
+      }
+    } catch (e) {
+      console.error('Erro ao auto-finalizar eventos do passado:', e);
+    }
+  };
+
+  const autoFinalizarSingleEvent = async (evento: Evento, registeredUserIds: Set<string>) => {
+    try {
+      const ranked = [...(evento.participantes || [])].sort((a, b) => {
+        const vA = a.vitorias || 0;
+        const vB = b.vitorias || 0;
+        const dA = a.derrotas || 0;
+        const dB = b.derrotas || 0;
+        if (vB !== vA) return vB - vA;
+        return dA - dB;
+      });
+
+      const numGanhadores = Math.min(6, Math.floor(ranked.length / 3));
+      const numPerdedores = numGanhadores;
+
+      const updatedParticipantes = [...(evento.participantes || [])];
+
+      if (evento.grupo_id && evento.modalidade_id) {
+        for (let i = 0; i < ranked.length; i++) {
+          const p = ranked[i];
+          const isCadastrado = registeredUserIds.has(p.id);
+          if (!isCadastrado) continue;
+
+          let delta = 0;
+          if (i < numGanhadores) {
+            delta = 0.5;
+          } else if (i >= ranked.length - numPerdedores) {
+            delta = -0.5;
+          }
+
+          // Buscar o rating atual dele para este grupo e esporte
+          const { data: ratingRow } = await supabase
+            .from('ratings_jogador')
+            .select('rating')
+            .eq('usuario_id', p.id)
+            .eq('grupo_id', evento.grupo_id)
+            .eq('modalidade_id', evento.modalidade_id)
+            .maybeSingle();
+
+          let currentRating = ratingRow ? Number(ratingRow.rating) : 3.0;
+          let newRating = currentRating + delta;
+          newRating = Math.min(5.0, Math.max(1.0, newRating));
+
+          // Upsert no Supabase
+          await supabase.from('ratings_jogador').upsert({
+            usuario_id: p.id,
+            grupo_id: evento.grupo_id,
+            modalidade_id: evento.modalidade_id,
+            rating: newRating,
+          });
+
+          // Atualizar no participante correspondente
+          const pIndex = updatedParticipantes.findIndex((part) => part.id === p.id);
+          if (pIndex !== -1) {
+            updatedParticipantes[pIndex].avaliacao = newRating;
+          }
+        }
+      }
+
+      // Marcar evento como finalizado no Supabase
+      const updatedConfig = { ...(evento.configuracao || {}), finalizado: true };
+      await supabase
+        .from('eventos')
+        .update({
+          configuracao: updatedConfig,
+          participantes: updatedParticipantes,
+        })
+        .eq('id', evento.id);
+
+      console.log(`Evento ${evento.id} ("${evento.descricao}") encerrado automaticamente.`);
+    } catch (e) {
+      console.error(`Erro ao processar finalização automática do evento ${evento.id}:`, e);
+    }
+  };
+
   const fetchEventos = async () => {
     setLoading(true);
     try {
@@ -81,7 +170,29 @@ export default function EventosList() {
 
       if (!error && data) {
         const activeEventos = (data as Evento[]).filter(ev => !ev.configuracao?.finalizado);
-        setEventos(activeEventos);
+        
+        // Separar eventos ativos de hoje ou do futuro, e eventos do passado não finalizados
+        const startOfToday = dayjs().startOf('day');
+        
+        const todayOrFutureEvents: Evento[] = [];
+        const pastActiveEvents: Evento[] = [];
+
+        activeEventos.forEach((ev) => {
+          const evDate = dayjs(ev.data);
+          if (evDate.isSame(startOfToday, 'day') || evDate.isAfter(startOfToday)) {
+            todayOrFutureEvents.push(ev);
+          } else {
+            pastActiveEvents.push(ev);
+          }
+        });
+
+        // Set de hoje ou futuros na UI instantaneamente
+        setEventos(todayOrFutureEvents);
+
+        // Se houver algum evento ativo do passado, realizar o encerramento em segundo plano!
+        if (pastActiveEvents.length > 0) {
+          handleAutoFinalizeEvents(pastActiveEvents);
+        }
       } else {
         console.error('Error fetching events:', error);
       }
