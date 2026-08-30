@@ -647,27 +647,29 @@ export default function EventoDetails() {
     } else {
       // Jogo padrão: Mantém o vencedor e entra o novo time
       if (time1Venceu) {
-        setTime1(updatedTime1);
+        const winnerTime1 = updatedTime1.map((p) => ({ ...p, prioridade: 0 }));
+        setTime1(winnerTime1);
         setTime2(novoTime);
         setPlacarTime1(0);
         setPlacarTime2(0);
         setParticipantes(novosParticipantes);
         updateDatabase({
-          time1: updatedTime1,
+          time1: winnerTime1,
           time2: novoTime,
           vitorias_time1: newVitoriasTime1,
           vitorias_time2: 0,
           participantes: novosParticipantes,
         });
       } else {
+        const winnerTime2 = updatedTime2.map((p) => ({ ...p, prioridade: 0 }));
         setTime1(novoTime);
-        setTime2(updatedTime2);
+        setTime2(winnerTime2);
         setPlacarTime1(0);
         setPlacarTime2(0);
         setParticipantes(novosParticipantes);
         updateDatabase({
           time1: novoTime,
-          time2: updatedTime2,
+          time2: winnerTime2,
           vitorias_time1: 0,
           vitorias_time2: newVitoriasTime2,
           participantes: novosParticipantes,

@@ -157,5 +157,26 @@ export function selecionarProximosJogadores(
     return p;
   });
 
-  return { selecionados, novosParticipantes: lista };
+  // Normalizar a fila (shift-down): Se as prioridades mais baixas (como N=1) foram esvaziadas,
+  // deslocamos as prioridades remanescentes para baixo, de modo que o menor nível de espera comece em 1.
+  const restantesNaFilaComN = lista.filter(
+    (p) => p.checked && !selecionadosIds.has(p.id) && !jogandoIds.has(p.id) && (p.prioridade || 0) > 0
+  );
+
+  if (restantesNaFilaComN.length > 0) {
+    const minN = Math.min(...restantesNaFilaComN.map((p) => p.prioridade || 0));
+    if (minN > 1) {
+      const shiftAmount = minN - 1;
+      lista = lista.map((p) => {
+        if (p.checked && !selecionadosIds.has(p.id) && !jogandoIds.has(p.id) && (p.prioridade || 0) > 0) {
+          return { ...p, prioridade: (p.prioridade || 0) - shiftAmount };
+        }
+        return p;
+      });
+    }
+  }
+
+  const selecionadosZerados = selecionados.map((p) => ({ ...p, prioridade: 0 }));
+
+  return { selecionados: selecionadosZerados, novosParticipantes: lista };
 }
