@@ -81,12 +81,12 @@ export default function RankingList() {
   };
 
   return (
-    <div className="p-6 pb-24 w-full max-w-md mx-auto min-h-[calc(100vh-8rem)]">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-2.5 bg-yellow-500/20 text-yellow-400 rounded-xl">
-          <Trophy size={22} />
+    <div className="px-4 py-3 pb-24 w-full max-w-md mx-auto min-h-[calc(100vh-8rem)]">
+      <div className="flex items-center gap-3 mb-4 pl-14 h-11">
+        <div className="p-2 bg-yellow-500/10 text-yellow-500 rounded-xl flex items-center justify-center">
+          <Trophy size={18} />
         </div>
-        <h1 className="text-3xl font-extrabold text-slate-900">Classificação</h1>
+        <h1 className="text-2xl font-black text-slate-900 leading-none">Classificação</h1>
       </div>
 
       {loading ? (

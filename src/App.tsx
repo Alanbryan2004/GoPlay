@@ -58,14 +58,7 @@ function AppContent() {
       {/* Exibir Header em todas as rotas logadas */}
       {!isAuthRoute && <Header />}
       
-      <main className={`flex-1 overflow-y-auto ${
-        location.pathname === '/eventos' ||
-        location.pathname === '/grupos' ||
-        location.pathname === '/ranking' ||
-        location.pathname === '/amigos'
-          ? 'pt-16'
-          : 'pt-2'
-      }`}>
+      <main className="flex-1 overflow-y-auto pt-2">
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Home />} />

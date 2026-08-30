@@ -89,15 +89,15 @@ export default function EventosList() {
   );
 
   return (
-    <div className="p-6 pb-24 w-full max-w-md mx-auto relative min-h-[calc(100vh-8rem)]">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-extrabold text-slate-900">Eventos</h1>
+    <div className="px-4 py-3 pb-24 w-full max-w-md mx-auto relative min-h-[calc(100vh-8rem)]">
+      <div className="flex justify-between items-center mb-4 pl-14 h-11">
+        <h1 className="text-2xl font-black text-slate-900 leading-none">Eventos</h1>
         <button
           onClick={() => navigate(grupoId ? `/eventos/novo?grupo_id=${grupoId}` : '/eventos/novo')}
-          className="p-3 bg-gradient-to-r from-[#eb3237] to-red-600 hover:from-red-500 hover:to-red-600 text-white rounded-xl shadow-lg shadow-[#eb3237]/20 active:scale-95 transition-all"
+          className="p-2.5 bg-gradient-to-r from-[#eb3237] to-red-650 hover:from-red-500 hover:to-red-600 text-white rounded-xl shadow-lg shadow-[#eb3237]/20 active:scale-95 transition-all cursor-pointer"
           title="Novo Evento"
         >
-          <Plus size={20} strokeWidth={2.5} />
+          <Plus size={18} strokeWidth={2.5} />
         </button>
       </div>
 
