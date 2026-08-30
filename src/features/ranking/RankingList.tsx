@@ -20,6 +20,7 @@ export default function RankingList() {
 
   useEffect(() => {
     fetchFilters();
+    fetchCurrentUser();
   }, []);
 
   useEffect(() => {
@@ -37,6 +38,54 @@ export default function RankingList() {
       if (dbModalidades) setModalidades(dbModalidades);
     } catch (e) {
       console.error('Erro ao carregar filtros de classificação:', e);
+    }
+  };
+
+  const fetchCurrentUser = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('usuarios')
+          .select('id, nome')
+          .eq('email', user.email)
+          .single();
+        if (profile) {
+          await fetchLastParticipatedContext(profile.nome);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao buscar usuário logado no ranking:', e);
+    }
+  };
+
+  const fetchLastParticipatedContext = async (userName: string) => {
+    try {
+      // Buscar os últimos 50 eventos disputados ordenados decrescente
+      const { data: events, error } = await supabase
+        .from('eventos')
+        .select('grupo_id, modalidade_id, participantes')
+        .order('data', { ascending: false })
+        .limit(50);
+
+      if (!error && events) {
+        // Achar o primeiro evento em que o usuário participou
+        const lastEvent = events.find((event: any) => {
+          if (Array.isArray(event.participantes)) {
+            return event.participantes.some(
+              (p: any) => p.nome?.trim().toLowerCase() === userName.trim().toLowerCase()
+            );
+          }
+          return false;
+        });
+
+        if (lastEvent) {
+          if (lastEvent.grupo_id) setSelectedGrupoId(lastEvent.grupo_id);
+          if (lastEvent.modalidade_id) setSelectedModalidadeId(lastEvent.modalidade_id);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar último contexto de participação:', e);
     }
   };
 
