@@ -926,7 +926,7 @@ export default function EventoDetails() {
               {time1.map((p) => (
                 <div key={p.id} className="flex justify-between items-center group/item">
                   <span className="text-xs font-semibold text-red-700 truncate pr-1">
-                    {p.nome} <span className="text-[10px] text-slate-500">[{p.jogos || 0}]</span>
+                    {p.nome} <span className="text-[10px] text-slate-500">[{p.prioridade || 0}]</span>
                   </span>
                   <button
                     onClick={() => handleRemoverJogadorDoTimeAtivo(1, p.id)}
@@ -944,7 +944,7 @@ export default function EventoDetails() {
               {time2.map((p) => (
                 <div key={p.id} className="flex justify-between items-center group/item">
                   <span className="text-xs font-semibold text-blue-700 truncate pr-1">
-                    {p.nome} <span className="text-[10px] text-slate-500">[{p.jogos || 0}]</span>
+                    {p.nome} <span className="text-[10px] text-slate-500">[{p.prioridade || 0}]</span>
                   </span>
                   <button
                     onClick={() => handleRemoverJogadorDoTimeAtivo(2, p.id)}
