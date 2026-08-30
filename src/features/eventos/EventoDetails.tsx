@@ -544,6 +544,19 @@ export default function EventoDetails() {
       return { ...p, jogos, jogosGanhos };
     });
 
+    // Atualizar as referências de time1 e time2 com os novos dados estatísticos
+    const updatedTime1 = time1.map((tp) => {
+      const found = novosParticipantes.find((np) => np.id === tp.id);
+      return found ? found : tp;
+    });
+    const updatedTime2 = time2.map((tp) => {
+      const found = novosParticipantes.find((np) => np.id === tp.id);
+      return found ? found : tp;
+    });
+
+    const updatedTimePerdedor = time1Venceu ? updatedTime2 : updatedTime1;
+    const updatedTimeGanhador = time1Venceu ? updatedTime1 : updatedTime2;
+
     // Se o time vencedor atingir o limite de vitórias
     if (
       newVitoriasTime1 === config.maxNumberOfVictories ||
@@ -552,8 +565,8 @@ export default function EventoDetails() {
       if (config.actionAfterVictories === ActionAfterVictories.Remover) {
         // Remover: ambos os times vão para o fim da fila de prioridade
         // Subir prioridade do perdedor primeiro, depois do ganhador
-        novosParticipantes = subirPrioridade(novosParticipantes, timePerdedor);
-        novosParticipantes = subirPrioridade(novosParticipantes, timeGanhador);
+        novosParticipantes = subirPrioridade(novosParticipantes, updatedTimePerdedor);
+        novosParticipantes = subirPrioridade(novosParticipantes, updatedTimeGanhador);
 
         // Sortear dois novos times da fila
         let todosAguardando = novosParticipantes.filter((p) => p.checked);
@@ -588,7 +601,7 @@ export default function EventoDetails() {
     }
 
     // Caso padrão: Apenas o time perdedor vai para a fila
-    novosParticipantes = subirPrioridade(novosParticipantes, timePerdedor);
+    novosParticipantes = subirPrioridade(novosParticipantes, updatedTimePerdedor);
 
     // Obter os próximos jogadores da fila para compor o próximo time
     let todosAguardando = novosParticipantes.filter(
@@ -598,7 +611,7 @@ export default function EventoDetails() {
     // Se não houver jogadores aguardando suficientes, incluir os perdedores que acabaram de ir para a fila
     if (todosAguardando.length < config.numberOfPlayers) {
       todosAguardando = novosParticipantes.filter(
-        (p) => p.checked && !timeGanhador.some((tg) => tg.id === p.id)
+        (p) => p.checked && !updatedTimeGanhador.some((tg) => tg.id === p.id)
       );
     }
 
@@ -612,7 +625,7 @@ export default function EventoDetails() {
         newVitoriasTime2 === config.maxNumberOfVictories) &&
       config.actionAfterVictories === ActionAfterVictories.Mesclar
     ) {
-      const misturarFila = [...timeGanhador, ...novoTime];
+      const misturarFila = [...updatedTimeGanhador, ...novoTime];
       const novosTimesSorteados = sortearTimes(misturarFila, config.numberOfPlayers, config.numberOfTeams);
       
       const t1 = novosTimesSorteados[0];
@@ -636,11 +649,13 @@ export default function EventoDetails() {
     } else {
       // Jogo padrão: Mantém o vencedor e entra o novo time
       if (time1Venceu) {
+        setTime1(updatedTime1);
         setTime2(novoTime);
         setPlacarTime1(0);
         setPlacarTime2(0);
         setParticipantes(novosParticipantes);
         updateDatabase({
+          time1: updatedTime1,
           time2: novoTime,
           vitorias_time1: newVitoriasTime1,
           vitorias_time2: 0,
@@ -648,11 +663,13 @@ export default function EventoDetails() {
         });
       } else {
         setTime1(novoTime);
+        setTime2(updatedTime2);
         setPlacarTime1(0);
         setPlacarTime2(0);
         setParticipantes(novosParticipantes);
         updateDatabase({
           time1: novoTime,
+          time2: updatedTime2,
           vitorias_time1: 0,
           vitorias_time2: newVitoriasTime2,
           participantes: novosParticipantes,
