@@ -21,7 +21,8 @@ import {
   ArrowLeft,
   Share2,
   Skull,
-  Crown
+  Crown,
+  Link2
 } from 'lucide-react';
 import Dialog from '../../components/common/Dialog';
 import {
@@ -69,6 +70,7 @@ export default function EventoDetails() {
   const [podiumStep, setPodiumStep] = useState<1 | 2>(1);
   const [showSubstituirModal, setShowSubstituirModal] = useState(false);
   const [substituirTarget, setSubstituirTarget] = useState<{ timeIndex: 1 | 2; slotIndex: number } | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any | null>(null);
   const [dialog, setDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -104,11 +106,12 @@ export default function EventoDetails() {
 
         const { data: profile } = await supabase
           .from('usuarios')
-          .select('id')
+          .select('id, nome, foto, email')
           .eq('email', authUser.email)
           .single();
         
         if (!profile) return;
+        setCurrentUserProfile(profile);
         const loggedId = profile.id;
 
         // 2. Buscar amigos ativos
@@ -907,6 +910,143 @@ export default function EventoDetails() {
     });
   };
 
+  // Copiar link do evento para o clipboard
+  const handleCopiarLinkEvento = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setDialog({
+      isOpen: true,
+      title: 'Link de Convite Copiado! 🔗',
+      message: 'O link deste evento foi copiado para a sua área de transferência. Envie para os seus amigos no WhatsApp para que eles possam confirmar presença de forma simples e direta!',
+      type: 'alert',
+      onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+    });
+  };
+
+  // Confirmar presença de forma autônoma
+  const handleSelfConfirmarPresenca = async () => {
+    if (!currentUserProfile || !evento) return;
+    
+    try {
+      // 1. Obter avaliação (rating) do usuário logado se existir
+      let userRatingVal = 3.0;
+      if (evento.grupo_id && evento.modalidade_id) {
+        const { data: dbRating } = await supabase
+          .from('ratings_jogador')
+          .select('rating')
+          .eq('usuario_id', currentUserProfile.id)
+          .eq('grupo_id', evento.grupo_id)
+          .eq('modalidade_id', evento.modalidade_id)
+          .maybeSingle();
+        if (dbRating) {
+          userRatingVal = Number(dbRating.rating);
+        }
+      }
+
+      // 2. Montar objeto participante
+      const novoParticipante: Participante = {
+        id: currentUserProfile.id,
+        nome: currentUserProfile.nome,
+        avaliacao: userRatingVal,
+        checked: true,
+        prioridade: 0,
+        jogos: 0,
+        jogosGanhos: 0,
+        foto: currentUserProfile.foto || '',
+        vitorias: 0,
+        derrotas: 0
+      };
+
+      // 3. Atualizar lista de participantes
+      let novosParticipantes = [...participantes];
+      const index = novosParticipantes.findIndex(p => p.id === currentUserProfile.id);
+      if (index >= 0) {
+        novosParticipantes[index] = {
+          ...novosParticipantes[index],
+          checked: true,
+          avaliacao: userRatingVal
+        };
+      } else {
+        novosParticipantes.push(novoParticipante);
+      }
+
+      // 4. Salvar no Supabase
+      const { error } = await supabase
+        .from('eventos')
+        .update({ participantes: novosParticipantes })
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      setParticipantes(novosParticipantes);
+      setDialog({
+        isOpen: true,
+        title: 'Presença Confirmada! ✅',
+        message: 'Sua presença foi registrada com sucesso neste evento!',
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+    } catch (err: any) {
+      setDialog({
+        isOpen: true,
+        title: 'Erro',
+        message: 'Não foi possível confirmar presença: ' + err.message,
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+    }
+  };
+
+  // Cancelar presença de forma autônoma
+  const handleSelfCancelarPresenca = async () => {
+    if (!currentUserProfile || !evento) return;
+
+    try {
+      // 1. Marcar checked: false para o participante
+      let novosParticipantes = participantes.map(p => {
+        if (p.id === currentUserProfile.id) {
+          return { ...p, checked: false };
+        }
+        return p;
+      });
+
+      // 2. Remover o jogador dos times ativos se ele estiver em campo
+      const novoTime1 = time1.filter(p => p.id !== currentUserProfile.id);
+      const novoTime2 = time2.filter(p => p.id !== currentUserProfile.id);
+
+      // 3. Salvar no Supabase
+      const { error } = await supabase
+        .from('eventos')
+        .update({
+          participantes: novosParticipantes,
+          time1: novoTime1,
+          time2: novoTime2
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setParticipantes(novosParticipantes);
+      setTime1(novoTime1);
+      setTime2(novoTime2);
+      
+      setDialog({
+        isOpen: true,
+        title: 'Presença Cancelada ❌',
+        message: 'Você cancelou sua presença neste evento.',
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+    } catch (err: any) {
+      setDialog({
+        isOpen: true,
+        title: 'Erro',
+        message: 'Não foi possível cancelar presença: ' + err.message,
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+    }
+  };
+
   // Compartilhar ranking final do evento ou destaques como imagem
   const handleCompartilharRanking = async () => {
     const elementId = podiumStep === 1 ? 'ranking-podium-content' : 'ranking-highlights-content';
@@ -1046,21 +1186,81 @@ export default function EventoDetails() {
 
         <div className="flex gap-2">
           <button
+            onClick={handleCopiarLinkEvento}
+            className="p-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-indigo-500 rounded-xl transition-all shadow-md cursor-pointer"
+            title="Copiar link de convite"
+          >
+            <Link2 size={18} />
+          </button>
+          <button
             onClick={() => setShowRanking(true)}
-            className="p-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-yellow-500 rounded-xl transition-all shadow-md"
+            className="p-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-yellow-500 rounded-xl transition-all shadow-md cursor-pointer"
             title="Ver classificação"
           >
             <Trophy size={18} />
           </button>
           <button
             onClick={() => setShowConfig(true)}
-            className="p-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-slate-600 rounded-xl transition-all shadow-md"
+            className="p-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-slate-600 rounded-xl transition-all shadow-md cursor-pointer"
             title="Configurações do evento"
           >
             <Settings size={18} />
           </button>
         </div>
       </div>
+
+      {/* CARD DE CONFIRMAÇÃO DE PRESENÇA AUTÔNOMA */}
+      {currentUserProfile && !evento.configuracao.finalizado && (
+        (() => {
+          const participanteLogado = participantes.find(p => p.id === currentUserProfile.id);
+          const estaConfirmado = participanteLogado?.checked === true;
+
+          return (
+            <div className={`p-4 rounded-2xl border transition-all shadow-md flex flex-col sm:flex-row justify-between items-center gap-4 ${
+              estaConfirmado 
+                ? 'bg-gradient-to-br from-emerald-50 to-teal-50/20 border-emerald-200 text-emerald-950'
+                : 'bg-gradient-to-br from-indigo-50/50 to-slate-50 border-slate-200'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-inner flex-shrink-0 ${
+                  estaConfirmado ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {estaConfirmado ? '✅' : '❓'}
+                </div>
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                    Sua Presença no Evento
+                  </h3>
+                  <p className="text-[11px] font-bold text-slate-500 mt-0.5">
+                    {estaConfirmado 
+                      ? 'Confirmado! Você já está na fila/quadra de jogo.' 
+                      : 'Ainda não confirmou. Clique no botão ao lado para confirmar!'
+                    }
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {estaConfirmado ? (
+                  <button
+                    onClick={handleSelfCancelarPresenca}
+                    className="w-full sm:w-auto px-4 py-2 border border-rose-300 hover:border-rose-450 text-rose-650 hover:bg-rose-50 font-bold rounded-xl text-xs transition-all cursor-pointer bg-white"
+                  >
+                    Não vou jogar
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSelfConfirmarPresenca}
+                    className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs transition-all shadow-md active:scale-95 cursor-pointer border-0"
+                  >
+                    Confirmar Presença
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()
+      )}
 
       {/* PAINEL DE JOGO ATIVO */}
       {isJogoAtivo && (
