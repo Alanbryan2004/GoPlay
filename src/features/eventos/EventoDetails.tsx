@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import html2canvas from 'html2canvas';
 import { supabase } from '../../lib/supabase';
 import type { Evento, Participante, EventoConfig } from '../../types';
 import { ActionAfterVictories } from '../../types';
@@ -18,7 +19,8 @@ import {
   Star,
   Users,
   AlertCircle,
-  ArrowLeft
+  ArrowLeft,
+  Share2
 } from 'lucide-react';
 import Dialog from '../../components/common/Dialog';
 import {
@@ -902,6 +904,68 @@ export default function EventoDetails() {
     });
   };
 
+  // Compartilhar ranking final do evento como imagem
+  const handleCompartilharRanking = async () => {
+    const el = document.getElementById('ranking-podium-content');
+    if (!el) return;
+
+    try {
+      // 1. Renderizar o elemento HTML em canvas usando html2canvas
+      const canvas = await html2canvas(el, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        scale: 2 // Alta definição
+      });
+
+      // 2. Converter o canvas para Blob
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          throw new Error('Falha ao gerar imagem do ranking');
+        }
+
+        const filename = `Ranking_${evento?.descricao || 'Evento'}.png`;
+        const file = new File([blob], filename, { type: 'image/png' });
+
+        // 3. Tentar usar o Web Share API do navegador (comum em celulares)
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Ranking Final - ${evento?.descricao || 'GoPlay'}`,
+            text: 'Confira o pódio do nosso evento no GoPlay! 🏆'
+          });
+        } else {
+          // 4. Fallback: Se não puder compartilhar direto, faz o download da imagem
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          
+          setDialog({
+            isOpen: true,
+            title: 'Download Concluído',
+            message: 'Imagem do ranking baixada com sucesso! Você já pode compartilhá-la nas suas redes.',
+            type: 'alert',
+            onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+          });
+        }
+      }, 'image/png');
+    } catch (err: any) {
+      console.error(err);
+      setDialog({
+        isOpen: true,
+        title: 'Erro',
+        message: 'Não foi possível compartilhar o ranking: ' + err.message,
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+    }
+  };
+
   // Obter jogadores na fila (Presentes que não estão no Time 1 nem no Time 2)
   const jogadoresFila = participantes.filter(
     (p) => p.checked && !time1.some((t) => t.id === p.id) && !time2.some((t) => t.id === p.id)
@@ -1722,7 +1786,7 @@ export default function EventoDetails() {
       {/* Modal de Pódio/Ranking Final */}
       {showPodium && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-6 animate-fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 flex flex-col space-y-4 max-h-[90vh] overflow-y-auto animate-slide-in">
+          <div id="ranking-podium-content" className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 flex flex-col space-y-4 max-h-[90vh] overflow-y-auto animate-slide-in">
             {/* Header */}
             <div className="text-center">
               <span className="text-2xl">🏆</span>
@@ -1836,16 +1900,25 @@ export default function EventoDetails() {
               );
             })()}
 
-            {/* Botão de Fechar e Voltar para Home */}
-            <button
-              onClick={() => {
-                setShowPodium(false);
-                navigate('/');
-              }}
-              className="w-full py-3 bg-[#eb3237] hover:bg-red-650 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center"
-            >
-              Confirmar e Ir para a Home
-            </button>
+            {/* Botões de Ação */}
+            <div className="flex gap-2 w-full">
+              <button
+                onClick={handleCompartilharRanking}
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all text-xs flex justify-center items-center gap-1.5 cursor-pointer border-0"
+              >
+                <Share2 size={15} />
+                <span>Compartilhar</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowPodium(false);
+                  navigate('/');
+                }}
+                className="flex-1 py-3 bg-[#eb3237] hover:bg-red-650 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center border-0"
+              >
+                Ir para a Home
+              </button>
+            </div>
           </div>
         </div>
       )}
