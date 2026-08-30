@@ -2016,7 +2016,7 @@ export default function EventoDetails() {
               {podiumStep === 1 ? (
                 <button
                   onClick={() => setPodiumStep(2)}
-                  className="flex-1 py-3 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center border-0"
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center border-0"
                 >
                   Avançar
                 </button>
