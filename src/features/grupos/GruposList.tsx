@@ -1462,7 +1462,7 @@ export default function GruposList() {
                 className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-emerald-500/10 active:scale-[0.98] transition-all"
               >
                 <Plus size={15} />
-                <span>Criar Nova Partida</span>
+                <span>Criar Novo Evento</span>
               </button>
 
               <div className="pt-2 border-t border-dashed border-slate-200">

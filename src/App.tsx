@@ -14,6 +14,7 @@ import Profile from './features/auth/Profile';
 import EventosList from './features/eventos/EventosList';
 import NovoEvento from './features/eventos/NovoEvento';
 import EventoDetails from './features/eventos/EventoDetails';
+import SorteioQuick from './features/eventos/SorteioQuick';
 
 // Other Feature Pages
 import GruposList from './features/grupos/GruposList';
@@ -66,6 +67,7 @@ function AppContent() {
           <Route path="/eventos" element={<EventosList />} />
           <Route path="/eventos/novo" element={<NovoEvento />} />
           <Route path="/eventos/:id" element={<EventoDetails />} />
+          <Route path="/sorteio" element={<SorteioQuick />} />
           
           <Route path="/grupos" element={<GruposList />} />
           <Route path="/ranking" element={<RankingList />} />

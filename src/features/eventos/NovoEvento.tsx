@@ -28,25 +28,26 @@ export default function NovoEvento() {
   // Estados de Privacidade e Grupo
   const [isPublico, setIsPublico] = useState(true);
   const [selectedGrupoId, setSelectedGrupoId] = useState('');
-  const [grupos, setGrupos] = useState<any[]>([]);
+  const [grupoNome, setGrupoNome] = useState('');
 
   useEffect(() => {
     fetchModalidades();
-    fetchGrupos();
     if (grupoId) {
       setIsPublico(false);
       setSelectedGrupoId(grupoId);
+      fetchGrupoNome(grupoId);
     }
   }, [grupoId]);
 
-  const fetchGrupos = async () => {
+  const fetchGrupoNome = async (gid: string) => {
     try {
-      const { data, error } = await supabase.from('grupos').select('id, nome');
+      const { data, error } = await supabase
+        .from('grupos')
+        .select('nome')
+        .eq('id', gid)
+        .single();
       if (data && !error) {
-        setGrupos(data);
-        if (data.length > 0 && !grupoId) {
-          setSelectedGrupoId(data[0].id);
-        }
+        setGrupoNome(data.nome);
       }
     } catch (e) {
       console.error(e);
@@ -240,65 +241,56 @@ export default function NovoEvento() {
             </div>
           </div>
 
-          {/* Visibilidade do Evento */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-650 uppercase tracking-wider mb-2">
-              Visibilidade da Partida
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!grupoId) {
-                    setIsPublico(true);
-                  }
-                }}
-                disabled={!!grupoId}
-                className={`py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  isPublico
-                    ? 'bg-red-650 border-red-500 text-white shadow-md'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50'
-                }`}
-              >
-                <span>🌍 Público</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsPublico(false)}
-                className={`py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  !isPublico
-                    ? 'bg-red-650 border-red-500 text-white shadow-md'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <span>🔒 Privado (Grupo)</span>
-              </button>
-            </div>
-          </div>
+          {/* Visibilidade do Evento (Somente se criado a partir de um Grupo) */}
+          {!!grupoId && (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-slate-650 uppercase tracking-wider mb-2">
+                  Visibilidade da Partida
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!grupoId) {
+                        setIsPublico(true);
+                      }
+                    }}
+                    disabled={!!grupoId}
+                    className={`py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      isPublico
+                        ? 'bg-red-650 border-red-500 text-white shadow-md'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50'
+                    }`}
+                  >
+                    <span>🌍 Público</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPublico(false)}
+                    className={`py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      !isPublico
+                        ? 'bg-red-650 border-red-500 text-white shadow-md'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>🔒 Privado (Grupo)</span>
+                  </button>
+                </div>
+              </div>
 
-          {/* Seleção do Grupo se for Privado */}
-          {!isPublico && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-650 uppercase tracking-wider mb-2">
-                Grupo do Evento
-              </label>
-              <select
-                value={selectedGrupoId}
-                onChange={(e) => setSelectedGrupoId(e.target.value)}
-                disabled={!!grupoId} // Bloqueia a seleção se o evento já estiver sendo criado a partir de um grupo específico
-                className="w-full bg-slate-50 border border-slate-250 rounded-xl py-3 px-4 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all text-sm cursor-pointer appearance-none"
-              >
-                {grupos.length === 0 ? (
-                  <option value="">Nenhum grupo encontrado</option>
-                ) : (
-                  grupos.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.nome}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
+              {/* Nome do Grupo estático se for Privado */}
+              {!isPublico && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-650 uppercase tracking-wider mb-2">
+                    Grupo do Evento
+                  </label>
+                  <div className="w-full bg-slate-100 border border-slate-200 rounded-xl py-3 px-4 text-slate-600 text-sm font-bold shadow-inner">
+                    {grupoNome || 'Carregando nome do grupo...'}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div className="grid grid-cols-2 gap-4">
