@@ -41,6 +41,8 @@ export default function EventosList() {
       let query = supabase.from('eventos').select('*');
       if (grupoId) {
         query = query.eq('grupo_id', grupoId);
+      } else {
+        query = query.is('grupo_id', null);
       }
       const { data, error } = await query.order('data', { ascending: true });
 
