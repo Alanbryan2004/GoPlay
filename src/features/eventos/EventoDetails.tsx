@@ -1154,6 +1154,23 @@ export default function EventoDetails() {
               </span>
             ))}
           </div>
+          {jogadoresFila.length > config.numberOfPlayers && (
+            <div className="pt-2.5 border-t border-dashed border-slate-150 space-y-1.5">
+              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                Restante da Fila ({jogadoresFila.length - config.numberOfPlayers})
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {filaOrdenada.slice(config.numberOfPlayers).map((p) => (
+                  <span
+                    key={p.id}
+                    className="px-2 py-0.5 rounded-md bg-slate-100/40 border border-slate-150 text-[10px] text-slate-500 font-medium"
+                  >
+                    {p.nome} <span className="text-[8px] text-slate-450">({p.prioridade})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
