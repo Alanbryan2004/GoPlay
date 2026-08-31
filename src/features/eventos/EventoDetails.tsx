@@ -285,6 +285,60 @@ export default function EventoDetails() {
           }
         }
 
+        // AUTO-ADICIONAR CRIADOR DO EVENTO se ainda não estiver na lista
+        if (!data.configuracao?.finalizado) {
+          try {
+            const { data: { user: authUser } } = await supabase.auth.getUser();
+            if (authUser) {
+              const { data: creatorProfile } = await supabase
+                .from('usuarios')
+                .select('id, nome, foto')
+                .eq('email', authUser.email)
+                .single();
+
+              // Verificar se o usuário é o criador do evento E ainda não está na lista
+              if (
+                creatorProfile &&
+                data.usuario_id === creatorProfile.id &&
+                !loadedParticipantes.some((p: any) => p.id === creatorProfile.id)
+              ) {
+                // Buscar rating se o evento tiver grupo e modalidade
+                let rating = 3;
+                if (data.grupo_id && data.modalidade_id) {
+                  const { data: rRow } = await supabase
+                    .from('ratings_jogador')
+                    .select('rating')
+                    .eq('usuario_id', creatorProfile.id)
+                    .eq('grupo_id', data.grupo_id)
+                    .eq('modalidade_id', data.modalidade_id)
+                    .maybeSingle();
+                  if (rRow) rating = Number(rRow.rating);
+                }
+
+                const criadorParticipante = {
+                  id: creatorProfile.id,
+                  nome: creatorProfile.nome,
+                  foto: creatorProfile.foto || '',
+                  checked: true,
+                  avaliacao: rating,
+                  prioridade: 0,
+                  jogos: 0,
+                  jogosGanhos: 0,
+                };
+
+                loadedParticipantes = [...loadedParticipantes, criadorParticipante].sort(
+                  (a: any, b: any) => a.nome.localeCompare(b.nome)
+                );
+
+                // Persistir no banco
+                await supabase.from('eventos').update({ participantes: loadedParticipantes }).eq('id', id);
+              }
+            }
+          } catch (e) {
+            console.error('Erro ao auto-adicionar criador do evento:', e);
+          }
+        }
+
         setParticipantes(loadedParticipantes);
         setTime1(data.time1 || []);
         setTime2(data.time2 || []);
@@ -611,12 +665,15 @@ export default function EventoDetails() {
         setTime2(activeT2);
         setPlacarTime1(0);
         setPlacarTime2(0);
+        // Zerar contão de vitórias ao reequilibrar
+        setVitoriasTime1(0);
+        setVitoriasTime2(0);
 
         updateDatabase({
           time1: activeT1,
           time2: activeT2,
-          vitorias_time1: vitoriasTime1,
-          vitorias_time2: vitoriasTime2
+          vitorias_time1: 0,
+          vitorias_time2: 0,
         });
       }
     }, 80);
@@ -1439,16 +1496,16 @@ export default function EventoDetails() {
             {/* Jogadores Time 1 */}
             <div className="space-y-1.5 p-3 rounded-xl bg-red-50 border border-red-200">
               {time1.map((p) => (
-                <div key={p.id} className="flex justify-between items-center group/item">
+                <div key={p.id} className="flex justify-between items-center">
                   <span className="text-xs font-semibold text-red-700 truncate pr-1">
                     {p.nome} <span className="text-[10px] text-slate-500">[{p.prioridade || 0}]</span>
                   </span>
                   <button
                     onClick={() => handleRemoverJogadorDoTimeAtivo(1, p.id)}
-                    className="opacity-0 group-hover/item:opacity-100 p-0.5 hover:text-red-400 transition-all text-slate-650"
+                    className="flex-shrink-0 p-1 rounded-lg hover:bg-red-100 text-red-300 hover:text-red-500 transition-all cursor-pointer"
                     title="Remover e mandar pra fila"
                   >
-                    <X size={12} />
+                    <Trash2 size={13} />
                   </button>
                 </div>
               ))}
@@ -1470,16 +1527,16 @@ export default function EventoDetails() {
             {/* Jogadores Time 2 */}
             <div className="space-y-1.5 p-3 rounded-xl bg-blue-50 border border-blue-200">
               {time2.map((p) => (
-                <div key={p.id} className="flex justify-between items-center group/item">
+                <div key={p.id} className="flex justify-between items-center">
                   <span className="text-xs font-semibold text-blue-700 truncate pr-1">
                     {p.nome} <span className="text-[10px] text-slate-500">[{p.prioridade || 0}]</span>
                   </span>
                   <button
                     onClick={() => handleRemoverJogadorDoTimeAtivo(2, p.id)}
-                    className="opacity-0 group-hover/item:opacity-100 p-0.5 hover:text-red-400 transition-all text-slate-650"
+                    className="flex-shrink-0 p-1 rounded-lg hover:bg-blue-100 text-blue-300 hover:text-blue-500 transition-all cursor-pointer"
                     title="Remover e mandar pra fila"
                   >
-                    <X size={12} />
+                    <Trash2 size={13} />
                   </button>
                 </div>
               ))}
