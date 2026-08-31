@@ -119,7 +119,7 @@ export default function EventoDetails() {
           .select('id, nome, foto, email')
           .eq('email', authUser.email)
           .single();
-        
+
         if (!profile) return;
         setCurrentUserProfile(profile);
         const loggedId = profile.id;
@@ -135,26 +135,49 @@ export default function EventoDetails() {
           a.usuario_id === loggedId ? a.amigo_id : a.usuario_id
         );
 
-        // 3. Buscar membros do grupo (se o evento pertencer a um grupo)
+        // 3. Buscar membros aprovados de TODOS os grupos que o usuário logado participa
+        // (independente de o evento ter grupo_id ou não)
         let groupMemberIds: string[] = [];
-        const { data: evData } = await supabase
-          .from('eventos')
-          .select('grupo_id')
-          .eq('id', id)
-          .single();
 
-        if (evData && evData.grupo_id) {
+        const { data: meusGrupos } = await supabase
+          .from('membros_grupo')
+          .select('grupo_id')
+          .eq('usuario_id', loggedId)
+          .eq('status', 'aprovado');
+
+        if (meusGrupos && meusGrupos.length > 0) {
+          const grupoIds = meusGrupos.map((mg) => mg.grupo_id);
+
           const { data: dbMembros } = await supabase
             .from('membros_grupo')
             .select('usuario_id')
-            .eq('grupo_id', evData.grupo_id);
-          
+            .in('grupo_id', grupoIds)
+            .eq('status', 'aprovado');
+
           if (dbMembros) {
-            groupMemberIds = dbMembros.map(m => m.usuario_id);
+            groupMemberIds = dbMembros.map((m) => m.usuario_id);
+          }
+        } else {
+          // Fallback: se não achou grupos por status aprovado, tenta pelo grupo_id do evento
+          const { data: evData } = await supabase
+            .from('eventos')
+            .select('grupo_id')
+            .eq('id', id)
+            .single();
+
+          if (evData && evData.grupo_id) {
+            const { data: dbMembros } = await supabase
+              .from('membros_grupo')
+              .select('usuario_id')
+              .eq('grupo_id', evData.grupo_id);
+
+            if (dbMembros) {
+              groupMemberIds = dbMembros.map((m) => m.usuario_id);
+            }
           }
         }
 
-        // Unir todos os IDs permitidos (eu mesmo + amigos + membros do grupo)
+        // Unir todos os IDs permitidos (eu mesmo + amigos + membros dos grupos)
         const allowedIds = Array.from(new Set([loggedId, ...friendIds, ...groupMemberIds]));
 
         if (allowedIds.length > 0) {
