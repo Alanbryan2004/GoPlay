@@ -171,21 +171,24 @@ export default function RankingList() {
       }
 
       if (users && events) {
-        // Encontrar nomes de jogadores que participaram de pelo menos uma partida nos eventos filtrados
+        // Criar um Set de IDs E nomes dos participantes para matching duplo
+        const participatedPlayerIds = new Set<string>();
         const participatedPlayerNames = new Set<string>();
         events.forEach((event: any) => {
           if (Array.isArray(event.participantes)) {
             event.participantes.forEach((p: any) => {
-              if (p.nome) {
-                participatedPlayerNames.add(p.nome.trim().toLowerCase());
-              }
+              if (p.id) participatedPlayerIds.add(p.id);
+              if (p.nome) participatedPlayerNames.add(p.nome.trim().toLowerCase());
             });
           }
         });
 
-        // Filtrar usuários que participaram e mapear suas estatísticas de vitórias/rating nos eventos correspondentes
+        // Filtrar usuários que participaram — primeiro por ID (preciso), depois por nome (fallback)
         const ranked: PlayerRank[] = users
-          .filter((user) => participatedPlayerNames.has(user.nome?.trim().toLowerCase()))
+          .filter((user) =>
+            participatedPlayerIds.has(user.id) ||
+            participatedPlayerNames.has(user.nome?.trim().toLowerCase())
+          )
           .map((user) => {
             let totalVitorias = 0;
             const ratings: number[] = [];
@@ -194,9 +197,12 @@ export default function RankingList() {
             events.forEach((event: any) => {
               const participantes = event.participantes;
               if (Array.isArray(participantes)) {
-                const p = participantes.find(
-                  (part) => part.nome?.trim().toLowerCase() === user.nome?.trim().toLowerCase()
-                );
+                // Busca por ID primeiro (mais confiável), depois por nome como fallback
+                const p =
+                  participantes.find((part) => part.id === user.id) ||
+                  participantes.find(
+                    (part) => part.nome?.trim().toLowerCase() === user.nome?.trim().toLowerCase()
+                  );
                 if (p) {
                   totalVitorias += p.jogosGanhos || 0;
                   if (typeof p.avaliacao === 'number') {
@@ -226,7 +232,9 @@ export default function RankingList() {
               vitorias: totalVitorias,
               rating: mediaRating,
             };
-          });
+          })
+          // Remover usuários sem nenhuma vitória E sem rating registrado (evitar fantasmas no ranking)
+          .filter((u) => u.vitorias > 0 || ratingRows.some((r) => r.usuario_id === u.id));
 
         // Ordena por número de vitórias decrescente, depois por rating e por fim nome alfabético
         ranked.sort((a, b) => {

@@ -982,9 +982,11 @@ export default function EventoDetails() {
 
             for (let i = 0; i < ranked.length; i++) {
               const p = ranked[i];
-              // Verificar se é cadastrado no sistema
-              const isCadastrado = todasPessoas.some((u) => u.id === p.id);
-              if (!isCadastrado) continue;
+              // Verificar se o participante é um usuário cadastrado no sistema
+              // (tem UUID válido de 36 caracteres, não é um convidado anônimo gerado por uuidv4 local)
+              // Antes usávamos todasPessoas.some(), mas isso excluía novos usuários sem amigos ainda
+              const isRegisteredUser = typeof p.id === 'string' && p.id.length === 36 && p.id.includes('-');
+              if (!isRegisteredUser) continue;
 
               // Determinar o ajuste de rating
               let delta = 0;
