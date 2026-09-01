@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Torneio, TorneioConfronto } from '../../types/torneio';
-import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users } from 'lucide-react';
+import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users, Link, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import Dialog from '../../components/common/Dialog';
@@ -343,6 +343,29 @@ export default function TorneioDetails() {
     await supabase.from('torneios').update({ chaveamento: novosConfrontos }).eq('id', torneio.id);
   };
 
+  const handleCopiarLink = () => {
+    if (!torneio) return;
+    const shareUrl = window.location.href;
+    const shareText = `🏆 Venha participar do torneio "${torneio.nome}" no GoPlay!\n\nAcesse o link para ver o chaveamento e se inscrever:\n${shareUrl}`;
+
+    if (navigator.share) {
+      navigator.share({
+        title: torneio.nome,
+        text: shareText,
+        url: shareUrl,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(shareUrl);
+      setDialog({
+        isOpen: true,
+        title: 'Link Copiado! 🔗',
+        message: 'O link de convite do torneio foi copiado para a sua área de transferência. Compartilhe com quem quiser!',
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[calc(100vh-8rem)]">
@@ -408,21 +431,31 @@ export default function TorneioDetails() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {/* Botão Compartilhar Link */}
+          <button
+            onClick={handleCopiarLink}
+            className="p-2.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl border border-blue-200 active:scale-95 transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+            title="Compartilhar Link do Torneio"
+          >
+            <Share2 size={15} />
+            <span>Convite</span>
+          </button>
+
           {/* Botão Excluir Torneio */}
           <button
             onClick={handleExcluirTorneio}
             className="p-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl border border-red-200 active:scale-95 transition-all cursor-pointer"
             title="Excluir Torneio"
           >
-            <Trash2 size={16} />
+            <Trash2 size={15} />
           </button>
 
           {/* Botão de Sortear Chaveamento */}
           <button
             onClick={handleSortearChaveamento}
             disabled={sorteando}
-            className="p-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 text-xs font-black cursor-pointer"
+            className="p-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 text-xs font-black cursor-pointer"
             title="Realizar Sorteio do Chaveamento"
           >
             <Shuffle size={14} />
