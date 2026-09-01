@@ -9,19 +9,34 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
+    // Timeout de segurança: Se o Supabase demorar mais de 4s para responder a sessão, forçar a liberação do loading
+    const safetyTimeout = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn('useAuth: session check timed out, releasing loading state');
+        setLoading(false);
+      }
+    }, 4000);
+
     // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
       setUser(session?.user ?? null);
       if (session?.user) {
         syncDbUser(session.user);
       } else {
         setLoading(false);
       }
+    }).catch(err => {
+      console.error('Error fetching session:', err);
+      if (mounted) setLoading(false);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (!mounted) return;
         setUser(session?.user ?? null);
         if (session?.user) {
           syncDbUser(session.user);
@@ -33,6 +48,8 @@ export function useAuth() {
     );
 
     return () => {
+      mounted = false;
+      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
   }, []);
