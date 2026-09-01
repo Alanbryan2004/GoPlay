@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Torneio, TorneioConfronto } from '../../types/torneio';
-import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save } from 'lucide-react';
+import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 
@@ -45,19 +45,57 @@ export default function TorneioDetails() {
     }
   };
 
+  const handleExcluirTorneio = async () => {
+    if (!torneio) return;
+    if (!window.confirm(`Tem certeza que deseja excluir o torneio "${torneio.nome}"?`)) return;
+
+    try {
+      await supabase.from('torneios').delete().eq('id', torneio.id);
+      navigate('/torneios');
+    } catch (e: any) {
+      alert('Erro ao excluir torneio: ' + e.message);
+    }
+  };
+
   // Algoritmo de Sorteio de Chaveamento / Pontos Corridos
   const handleSortearChaveamento = async () => {
     if (!torneio) return;
+
+    // VALIDAÇÃO EXIGIDA: Verificar se já atingiu a lista mínima de inscritos/jogadores de cada time
+    const totalTimes = torneio.quantidade_times || 4;
+    const porTime = torneio.jogadores_por_time || 2;
+    const minJogadoresNecessarios = totalTimes * porTime;
+    const inscritos = torneio.participantes || [];
+
+    // Se os times forem sorteados, exige quantidade total de inscritos
+    if (torneio.tipo_times === 'sorteio' && inscritos.length < minJogadoresNecessarios) {
+      alert(
+        `Não é possível sortear o chaveamento ainda!\n\nO torneio precisa de no mínimo ${minJogadoresNecessarios} jogadores inscritos (${porTime} por time em ${totalTimes} times).\nAtualmente existem ${inscritos.length} jogador(es) inscrito(s).`
+      );
+      return;
+    }
+
     setSorteando(true);
     setShowDrawAnimation(true);
 
-    // Embaralha a ordem dos times aleatoriamente
-    const timesEmbaralhados = [...torneio.times].sort(() => Math.random() - 0.5);
+    // Se for sorteio de times a partir dos participantes inscritos:
+    let finalTimes = [...torneio.times];
+    if (torneio.tipo_times === 'sorteio' && inscritos.length >= minJogadoresNecessarios) {
+      const inscritosEmbaralhados = [...inscritos].sort(() => Math.random() - 0.5);
+      finalTimes = finalTimes.map((t, idx) => {
+        const timeJogadores = inscritosEmbaralhados.slice(idx * porTime, (idx + 1) * porTime);
+        return {
+          ...t,
+          jogadores: timeJogadores.map((j) => ({ id: j.id, nome: j.nome })),
+        };
+      });
+    }
 
+    // Embaralha a ordem dos times aleatoriamente para montar as chaves
+    const timesEmbaralhados = [...finalTimes].sort(() => Math.random() - 0.5);
     const novosConfrontos: TorneioConfronto[] = [];
 
     if (torneio.formato === 'chaveamento') {
-      // Criação de chaves mata-mata (Quartas / Semifinais / Final dependendo da quantidade de times)
       const numTimes = timesEmbaralhados.length;
       let faseNome = 'Quartas de Final';
       if (numTimes <= 4) faseNome = 'Semifinal';
@@ -77,7 +115,6 @@ export default function TorneioDetails() {
         });
       }
     } else {
-      // Pontos corridos: todos jogam contra todos em rodadas
       const n = timesEmbaralhados.length;
       let matchCounter = 1;
       for (let i = 0; i < n; i++) {
@@ -96,10 +133,10 @@ export default function TorneioDetails() {
       }
     }
 
-    // Simula a animação do sorteio por 2.5 segundos
     setTimeout(async () => {
       try {
         const updates = {
+          times: finalTimes,
           chaveamento: novosConfrontos,
           status: 'sorteado' as const,
         };
@@ -211,16 +248,27 @@ export default function TorneioDetails() {
           </div>
         </div>
 
-        {/* Botão de Sortear Chaveamento */}
-        <button
-          onClick={handleSortearChaveamento}
-          disabled={sorteando}
-          className="p-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 text-xs font-black cursor-pointer"
-          title="Realizar Sorteio do Chaveamento"
-        >
-          <Shuffle size={14} />
-          <span>Sortear</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Botão Excluir Torneio */}
+          <button
+            onClick={handleExcluirTorneio}
+            className="p-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl border border-red-200 active:scale-95 transition-all cursor-pointer"
+            title="Excluir Torneio"
+          >
+            <Trash2 size={16} />
+          </button>
+
+          {/* Botão de Sortear Chaveamento */}
+          <button
+            onClick={handleSortearChaveamento}
+            disabled={sorteando}
+            className="p-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 text-xs font-black cursor-pointer"
+            title="Realizar Sorteio do Chaveamento"
+          >
+            <Shuffle size={14} />
+            <span>Sortear</span>
+          </button>
+        </div>
       </div>
 
       {/* Card de Informações e Datas */}
@@ -243,11 +291,45 @@ export default function TorneioDetails() {
           </button>
         </div>
 
-        <div className="flex items-center gap-4 text-xs font-semibold text-slate-600 pt-1 border-t border-slate-100">
-          <span>👥 {torneio.quantidade_times} Times</span>
+        <div className="flex items-center justify-between text-xs font-semibold text-slate-600 pt-2 border-t border-slate-100">
+          <span>👥 {torneio.quantidade_times} Times ({torneio.jogadores_por_time || 2}x{torneio.jogadores_por_time || 2})</span>
           <span>🎲 {torneio.tipo_times === 'sorteio' ? 'Por Sorteio' : 'Fechados'}</span>
           <span>{torneio.publico ? '🌐 Público' : '🔒 Privado'}</span>
         </div>
+      </div>
+
+      {/* Lista de Atletas / Participantes Inscritos */}
+      <div className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3 text-left">
+        <div className="flex items-center justify-between">
+          <h3 className="font-black text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+            <UserCheck size={14} className="text-emerald-500" />
+            Jogadores Inscritos ({torneio.participantes?.length || 0}/{(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)})
+          </h3>
+
+          <span className="text-[10px] font-bold text-slate-400">
+            {torneio.participantes?.length || 0} de {(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)} vagas
+          </span>
+        </div>
+
+        {/* Lista visual dos atletas inscritos */}
+        {torneio.participantes && torneio.participantes.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2">
+            {torneio.participantes.map((p) => (
+              <div key={p.id} className="p-2 rounded-xl bg-slate-50 border border-slate-150 flex items-center gap-2 truncate">
+                {p.foto ? (
+                  <img src={p.foto} alt={p.nome} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px] shrink-0">
+                    {p.nome.charAt(0)}
+                  </div>
+                )}
+                <span className="text-xs font-bold text-slate-800 truncate">{p.nome}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400 py-2">Nenhum jogador cadastrado ainda.</p>
+        )}
       </div>
 
       {/* Visualização das Chaves / Confrontos */}

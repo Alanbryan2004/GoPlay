@@ -25,9 +25,11 @@ export interface Torneio {
   formato: 'pontos_corridos' | 'chaveamento'; // Ponto Corrido ou Mata-Mata (Chaveamento)
   publico: boolean;
   quantidade_times: number;
+  jogadores_por_time?: number; // Quantidade de jogadores em cada time
   tipo_times: 'sorteio' | 'fechado';
   data_inicio: string;
   data_fim?: string;
+  participantes?: { id: string; nome: string; foto?: string }[]; // Lista de inscritos no torneio
   times: TorneioTime[];
   chaveamento: TorneioConfronto[];
   status: 'rascunho' | 'sorteado' | 'em_andamento' | 'finalizado';

@@ -13,6 +13,7 @@ export default function NovoTorneio() {
   const [formato, setFormato] = useState<'chaveamento' | 'pontos_corridos'>('chaveamento');
   const [publico, setPublico] = useState(true);
   const [quantidadeTimes, setQuantidadeTimes] = useState<number>(4);
+  const [jogadoresPorTime, setJogadoresPorTime] = useState<number>(2);
   const [tipoTimes, setTipoTimes] = useState<'sorteio' | 'fechado'>('sorteio');
   const [dataInicio, setDataInicio] = useState(new Date().toISOString().split('T')[0]);
   const [dataFim, setDataFim] = useState('');
@@ -73,14 +74,20 @@ export default function NovoTorneio() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return alert('Usuário não autenticado.');
 
-      const { data: profile } = await supabase.from('usuarios').select('id').eq('email', user.email).single();
+      const { data: profile } = await supabase.from('usuarios').select('id, nome, foto').eq('email', user.email).single();
       const creatorId = profile?.id || user.id;
 
-      // Monta objeto dos times iniciais
+      // Monta objeto dos times iniciais (com array de jogadores por time)
       const initialTimes = timesCustom.map((tName, idx) => ({
         id: `t_${idx + 1}_${Date.now()}`,
         nome: tName || `Time ${idx + 1}`,
+        jogadores: [],
       }));
+
+      // Adiciona o criador à lista inicial de inscritos no torneio
+      const initialParticipantes = profile
+        ? [{ id: profile.id, nome: profile.nome, foto: profile.foto || '' }]
+        : [];
 
       const novoTorneio = {
         criador_id: creatorId,
@@ -90,9 +97,11 @@ export default function NovoTorneio() {
         formato,
         publico,
         quantidade_times: quantidadeTimes,
+        jogadores_por_time: jogadoresPorTime,
         tipo_times: tipoTimes,
         data_inicio: dataInicio,
         data_fim: dataFim || null,
+        participantes: initialParticipantes,
         times: initialTimes,
         chaveamento: [],
         status: 'rascunho',
@@ -205,6 +214,33 @@ export default function NovoTorneio() {
               <option value="sorteio">🎲 Por Sorteio</option>
               <option value="fechado">🛡️ Times Fechados</option>
             </select>
+          </div>
+        </div>
+
+        {/* Configuração de Tamanho do Time */}
+        <div className="glass p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
+          <div>
+            <label className="text-xs font-black text-slate-700 uppercase tracking-wider block">
+              Jogadores por Time
+            </label>
+            <p className="text-[10px] text-slate-400">Total necessário: {quantidadeTimes * jogadoresPorTime} atletas</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {[2, 4, 6].map((num) => (
+              <button
+                type="button"
+                key={num}
+                onClick={() => setJogadoresPorTime(num)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer border ${
+                  jogadoresPorTime === num
+                    ? 'bg-[#eb3237] text-white border-[#eb3237] shadow-sm'
+                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                }`}
+              >
+                {num}x{num}
+              </button>
+            ))}
           </div>
         </div>
 
