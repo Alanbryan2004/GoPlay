@@ -12,6 +12,7 @@ interface NotificationCounts {
   groupRequests: number;     // Solicitações de entrada em grupo pendentes
   rankingChange: boolean;    // Houve mudança de posição no ranking recentemente
   finishedEvents: number;    // Eventos recém finalizados não vistos
+  latestFinishedEventId?: string; // ID do último evento finalizado para ir direto ao resultado
 }
 
 const LAST_SEEN_EVENTS_KEY = 'goplay_last_seen_events';
@@ -188,6 +189,8 @@ export default function Header() {
 
       // 5. Eventos encerrados recentemente onde o usuário participou
       let finishedEventsCount = 0;
+      let latestFinishedId: string | undefined = undefined;
+
       const lastSeenFinishedKey = `goplay_last_seen_finished_${userId}`;
       const lastSeenFinishedStr = localStorage.getItem(lastSeenFinishedKey);
       const lastSeenFinished = lastSeenFinishedStr ? new Date(lastSeenFinishedStr).toISOString() : null;
@@ -195,7 +198,7 @@ export default function Header() {
       if (lastSeenFinished) {
         const { data: allFinished } = await supabase
           .from('eventos')
-          .select('id, participantes, configuracao')
+          .select('id, participantes, configuracao, created_at')
           .neq('usuario_id', userId); // Eventos que outros encerraram
 
         if (allFinished) {
@@ -210,6 +213,9 @@ export default function Header() {
             return Array.isArray(ev.participantes) && ev.participantes.some((p: any) => p.id === userId);
           });
           finishedEventsCount = userFinishedEvents.length;
+          if (userFinishedEvents.length > 0) {
+            latestFinishedId = userFinishedEvents[0].id;
+          }
         }
       } else {
         localStorage.setItem(lastSeenFinishedKey, new Date().toISOString());
@@ -221,6 +227,7 @@ export default function Header() {
         groupRequests: groupRequestsCount,
         rankingChange: rankingChanged,
         finishedEvents: finishedEventsCount,
+        latestFinishedEventId: latestFinishedId,
       });
     } catch (e) {
       console.error('Erro ao buscar notificações:', e);
@@ -475,13 +482,18 @@ export default function Header() {
                   {notifs.finishedEvents > 0 && (
                     <button
                       onClick={() => {
+                        const targetId = notifs.latestFinishedEventId;
                         setShowNotifPanel(false);
                         setDrawerOpen(false);
                         if (currentUserId) localStorage.setItem(`goplay_last_seen_finished_${currentUserId}`, new Date().toISOString());
                         setNotifs(prev => ({ ...prev, finishedEvents: 0 }));
-                        navigate('/eventos');
+                        if (targetId) {
+                          navigate(`/eventos/${targetId}?show_result=true`);
+                        } else {
+                          navigate('/eventos');
+                        }
                       }}
-                      className="w-full flex items-center gap-2.5 p-2 bg-white rounded-xl border border-emerald-200 hover:border-emerald-400 transition-all text-left"
+                      className="w-full flex items-center gap-2.5 p-2 bg-white rounded-xl border border-emerald-200 hover:border-emerald-400 transition-all text-left cursor-pointer"
                     >
                       <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
                         <Trophy size={13} className="text-emerald-600" />

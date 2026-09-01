@@ -408,6 +408,13 @@ export default function EventoDetails() {
         setVitoriasTime1(data.vitorias_time1 || 0);
         setVitoriasTime2(data.vitorias_time2 || 0);
         if (data.configuracao) setConfig(data.configuracao);
+
+        // Se o evento estiver finalizado OU se a URL contiver ?show_result=true, abrir automaticamente o Pódio (Resultado)
+        const searchParams = new URLSearchParams(window.location.search);
+        if (data.configuracao?.finalizado || searchParams.get('show_result') === 'true') {
+          setPodiumStep(1);
+          setShowPodium(true);
+        }
       } else {
         console.error('Error fetching event details:', error);
       }
