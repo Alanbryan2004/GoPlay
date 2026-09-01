@@ -1366,6 +1366,7 @@ export default function EventoDetails() {
   );
 
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [selectedMatchIndex, setSelectedMatchIndex] = useState<number | null>(null);
 
   if (loading) {
     return (
@@ -1510,239 +1511,332 @@ export default function EventoDetails() {
         })()
       )}
 
-      {/* PAINEL DE JOGO ATIVO */}
-      {isJogoAtivo && (
-        <div className="glass p-5 rounded-2xl border border-slate-200 shadow-xl space-y-5 relative overflow-hidden">
-          {/* Fundo decorativo sutil com efeito gradiente de partida ativa */}
-          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-red-500 via-fuchsia-500 to-cyan-500" />
-          
-          <div className="flex justify-between items-center">
-            <h2 className="font-black text-xs uppercase tracking-widest text-red-400">
-              Partida Ativa
-            </h2>
-            <button
-              onClick={handleReequilibrarTimes}
-              className="px-2.5 py-1 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-slate-650 rounded-lg transition-all active:scale-95 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-wider cursor-pointer shadow-sm"
-              title="Reequilibrar os jogadores em quadra pelas estrelas"
-            >
-              <RefreshCw size={10} className="text-red-500" />
-              <span>Reequilibrar</span>
-            </button>
-          </div>
+      {/* SE EVENTO FINALIZADO: EXIBIR NAVEGADOR DE PARTIDAS E SELETOR 1, 2, 3... */}
+      {evento.configuracao?.finalizado ? (
+        (() => {
+          const historico: any[] = (evento.configuracao as any)?.historico_partidas || [];
+          const totalPartidas = historico.length;
+          const matchIdx = selectedMatchIndex !== null ? selectedMatchIndex : (totalPartidas > 0 ? totalPartidas - 1 : 0);
+          const partidaSelecionada = historico[matchIdx];
 
-          <div className="grid grid-cols-5 items-center">
-            {/* Time 1 */}
-            <div className="col-span-2 text-center space-y-3">
-              <span className="font-black text-sm text-red-700 block">Time A</span>
-              <div className="flex justify-center items-center gap-1">
+          return (
+            <div className="glass p-5 rounded-2xl border border-slate-200 shadow-xl space-y-4 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <h2 className="font-black text-xs uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+                  <History size={14} className="text-red-500" />
+                  Histórico de Partidas ({totalPartidas})
+                </h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  Evento Encerrado
+                </span>
+              </div>
+
+              {totalPartidas > 0 ? (
+                <>
+                  {/* Seletor horizontal de número de partidas: 1 2 3 4 5 ... */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    {historico.map((_: any, idx: number) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedMatchIndex(idx)}
+                        className={`min-w-[2.25rem] h-9 rounded-xl font-black text-xs transition-all flex items-center justify-center cursor-pointer border ${
+                          matchIdx === idx
+                            ? 'bg-[#eb3237] text-white border-[#eb3237] shadow-md scale-105'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {idx + 1}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Detalhe da Partida Selecionada */}
+                  {partidaSelecionada && (
+                    <div className="space-y-3 pt-1">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-500 border-b border-slate-150 pb-2">
+                        <span>Partida #{matchIdx + 1}</span>
+                        <span>{dayjs(partidaSelecionada.data).format('HH:mm:ss')}</span>
+                      </div>
+
+                      {/* Card com Placar e Escalação dos dois times */}
+                      <div className="grid grid-cols-2 gap-3 text-left">
+                        {/* Time A */}
+                        <div className={`p-3.5 rounded-2xl border ${partidaSelecionada.vencedor === 1 ? 'bg-red-50/80 border-red-200 text-red-950 ring-2 ring-red-500/20' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+                          <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-red-200/50">
+                            <span className="font-black text-xs uppercase tracking-wider text-red-600">Time A</span>
+                            <span className="text-xl font-black">{partidaSelecionada.placarTime1}</span>
+                          </div>
+                          <div className="space-y-1 text-xs font-semibold">
+                            {(partidaSelecionada.time1 || []).map((p: any) => (
+                              <div key={p.id} className="truncate">
+                                {p.nome}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Time B */}
+                        <div className={`p-3.5 rounded-2xl border ${partidaSelecionada.vencedor === 2 ? 'bg-blue-50/80 border-blue-200 text-blue-950 ring-2 ring-blue-500/20' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+                          <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-blue-200/50">
+                            <span className="font-black text-xs uppercase tracking-wider text-blue-600">Time B</span>
+                            <span className="text-xl font-black">{partidaSelecionada.placarTime2}</span>
+                          </div>
+                          <div className="space-y-1 text-xs font-semibold">
+                            {(partidaSelecionada.time2 || []).map((p: any) => (
+                              <div key={p.id} className="truncate">
+                                {p.nome}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-slate-400 text-center py-4">Nenhuma partida gravada para este evento.</p>
+              )}
+            </div>
+          );
+        })()
+      ) : (
+        <>
+          {/* PAINEL DE JOGO ATIVO */}
+          {isJogoAtivo && (
+            <div className="glass p-5 rounded-2xl border border-slate-200 shadow-xl space-y-5 relative overflow-hidden">
+              {/* Fundo decorativo sutil com efeito gradiente de partida ativa */}
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-red-500 via-fuchsia-500 to-cyan-500" />
+              
+              <div className="flex justify-between items-center">
+                <h2 className="font-black text-xs uppercase tracking-widest text-red-400">
+                  Partida Ativa
+                </h2>
                 <button
-                  onClick={() => setPlacarTime1((p) => Math.max(0, p - 1))}
-                  className="p-1.5 rounded-lg bg-slate-50 text-slate-450 active:scale-90"
+                  onClick={handleReequilibrarTimes}
+                  className="px-2.5 py-1 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-slate-650 rounded-lg transition-all active:scale-95 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-wider cursor-pointer shadow-sm"
+                  title="Reequilibrar os jogadores em quadra pelas estrelas"
                 >
-                  <Minus size={14} />
-                </button>
-                <div className="w-12 h-12 rounded-xl bg-red-950/40 border border-violet-800/40 flex items-center justify-center text-xl font-black text-red-900">
-                  {placarTime1}
-                </div>
-                <button
-                  onClick={() => setPlacarTime1((p) => p + 1)}
-                  className="p-1.5 rounded-lg bg-slate-50 text-slate-450 active:scale-90"
-                >
-                  <Plus size={14} />
+                  <RefreshCw size={10} className="text-red-500" />
+                  <span>Reequilibrar</span>
                 </button>
               </div>
-              <p className="text-[10px] text-slate-500">Vitórias: {vitoriasTime1}</p>
-            </div>
 
-            {/* Divisor X */}
-            <div className="text-center font-black text-slate-700 text-lg">X</div>
-
-            {/* Time 2 */}
-            <div className="col-span-2 text-center space-y-3">
-              <span className="font-black text-sm text-blue-700 block">Time B</span>
-              <div className="flex justify-center items-center gap-1">
-                <button
-                  onClick={() => setPlacarTime2((p) => Math.max(0, p - 1))}
-                  className="p-1.5 rounded-lg bg-slate-50 text-slate-450 active:scale-90"
-                >
-                  <Minus size={14} />
-                </button>
-                <div className="w-12 h-12 rounded-xl bg-blue-950/20 border border-blue-200 flex items-center justify-center text-xl font-black text-blue-900">
-                  {placarTime2}
+              <div className="grid grid-cols-5 items-center">
+                {/* Time 1 */}
+                <div className="col-span-2 text-center space-y-3">
+                  <span className="font-black text-sm text-red-700 block">Time A</span>
+                  <div className="flex justify-center items-center gap-1">
+                    <button
+                      onClick={() => setPlacarTime1((p) => Math.max(0, p - 1))}
+                      className="p-1.5 rounded-lg bg-slate-50 text-slate-450 active:scale-90"
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <div className="w-12 h-12 rounded-xl bg-red-950/20 border border-red-200 flex items-center justify-center text-xl font-black text-red-900">
+                      {placarTime1}
+                    </div>
+                    <button
+                      onClick={() => setPlacarTime1((p) => p + 1)}
+                      className="p-1.5 rounded-lg bg-slate-50 text-slate-450 active:scale-90"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500">Vitórias: {vitoriasTime1}</p>
                 </div>
-                <button
-                  onClick={() => setPlacarTime2((p) => p + 1)}
-                  className="p-1.5 rounded-lg bg-slate-50 text-slate-450 active:scale-90"
-                >
-                  <Plus size={14} />
-                </button>
+
+                <div className="col-span-1 text-center font-black text-slate-400 text-lg">
+                  X
+                </div>
+
+                {/* Time 2 */}
+                <div className="col-span-2 text-center space-y-3">
+                  <span className="font-black text-sm text-blue-700 block">Time B</span>
+                  <div className="flex justify-center items-center gap-1">
+                    <button
+                      onClick={() => setPlacarTime2((p) => Math.max(0, p - 1))}
+                      className="p-1.5 rounded-lg bg-slate-50 text-slate-450 active:scale-90"
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <div className="w-12 h-12 rounded-xl bg-blue-950/20 border border-blue-200 flex items-center justify-center text-xl font-black text-blue-900">
+                      {placarTime2}
+                    </div>
+                    <button
+                      onClick={() => setPlacarTime2((p) => p + 1)}
+                      className="p-1.5 rounded-lg bg-slate-50 text-slate-450 active:scale-90"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500">Vitórias: {vitoriasTime2}</p>
+                </div>
               </div>
-              <p className="text-[10px] text-slate-500">Vitórias: {vitoriasTime2}</p>
-            </div>
-          </div>
 
-          {/* Listagem de Jogadores dos Times */}
-          <div className="grid grid-cols-2 gap-4 text-left">
-            {/* Jogadores Time 1 */}
-            <div className="space-y-1.5 p-3 rounded-xl bg-red-50 border border-red-200">
-              {time1.map((p) => (
-                <div key={p.id} className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-red-700 truncate pr-1">
-                    {p.nome} <span className="text-[10px] text-slate-500">[{p.prioridade || 0}]</span>
-                  </span>
-                  <button
-                    onClick={() => handleRemoverJogadorDoTimeAtivo(1, p.id)}
-                    className="flex-shrink-0 p-1 rounded-lg hover:bg-red-100 text-red-300 hover:text-red-500 transition-all cursor-pointer"
-                    title="Remover e mandar pra fila"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+              {/* Listagem de Jogadores dos Times */}
+              <div className="grid grid-cols-2 gap-4 text-left">
+                {/* Jogadores Time 1 */}
+                <div className="space-y-1.5 p-3 rounded-xl bg-red-50 border border-red-200">
+                  {time1.map((p) => (
+                    <div key={p.id} className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-red-700 truncate pr-1">
+                        {p.nome} <span className="text-[10px] text-slate-500">[{p.prioridade || 0}]</span>
+                      </span>
+                      <button
+                        onClick={() => handleRemoverJogadorDoTimeAtivo(1, p.id)}
+                        className="flex-shrink-0 p-1 rounded-lg hover:bg-red-100 text-red-300 hover:text-red-500 transition-all cursor-pointer"
+                        title="Remover e mandar pra fila"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                  {Array.from({ length: emptySlots1 }).map((_, idx) => (
+                    <button
+                      key={`empty-t1-${idx}`}
+                      onClick={() => {
+                        setSubstituirTarget({ timeIndex: 1, slotIndex: idx });
+                        setShowSubstituirModal(true);
+                      }}
+                      className="w-full py-1.5 px-2 border border-dashed border-red-300 rounded-lg text-left text-[10px] font-bold text-red-500 hover:bg-red-100/50 transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <UserPlus size={10} />
+                      <span>Vaga Disponível</span>
+                    </button>
+                  ))}
                 </div>
-              ))}
-              {Array.from({ length: emptySlots1 }).map((_, idx) => (
-                <button
-                  key={`empty-t1-${idx}`}
-                  onClick={() => {
-                    setSubstituirTarget({ timeIndex: 1, slotIndex: idx });
-                    setShowSubstituirModal(true);
-                  }}
-                  className="w-full py-1.5 px-2 border border-dashed border-red-300 rounded-lg text-left text-[10px] font-bold text-red-500 hover:bg-red-100/50 transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  <UserPlus size={10} />
-                  <span>Vaga Disponível</span>
-                </button>
-              ))}
-            </div>
 
-            {/* Jogadores Time 2 */}
-            <div className="space-y-1.5 p-3 rounded-xl bg-blue-50 border border-blue-200">
-              {time2.map((p) => (
-                <div key={p.id} className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-blue-700 truncate pr-1">
-                    {p.nome} <span className="text-[10px] text-slate-500">[{p.prioridade || 0}]</span>
-                  </span>
-                  <button
-                    onClick={() => handleRemoverJogadorDoTimeAtivo(2, p.id)}
-                    className="flex-shrink-0 p-1 rounded-lg hover:bg-blue-100 text-blue-300 hover:text-blue-500 transition-all cursor-pointer"
-                    title="Remover e mandar pra fila"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                {/* Jogadores Time 2 */}
+                <div className="space-y-1.5 p-3 rounded-xl bg-blue-50 border border-blue-200">
+                  {time2.map((p) => (
+                    <div key={p.id} className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-blue-700 truncate pr-1">
+                        {p.nome} <span className="text-[10px] text-slate-500">[{p.prioridade || 0}]</span>
+                      </span>
+                      <button
+                        onClick={() => handleRemoverJogadorDoTimeAtivo(2, p.id)}
+                        className="flex-shrink-0 p-1 rounded-lg hover:bg-blue-100 text-blue-300 hover:text-blue-500 transition-all cursor-pointer"
+                        title="Remover e mandar pra fila"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                  {Array.from({ length: emptySlots2 }).map((_, idx) => (
+                    <button
+                      key={`empty-t2-${idx}`}
+                      onClick={() => {
+                        setSubstituirTarget({ timeIndex: 2, slotIndex: idx });
+                        setShowSubstituirModal(true);
+                      }}
+                      className="w-full py-1.5 px-2 border border-dashed border-blue-300 rounded-lg text-left text-[10px] font-bold text-blue-500 hover:bg-blue-100/50 transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <UserPlus size={10} />
+                      <span>Vaga Disponível</span>
+                    </button>
+                  ))}
                 </div>
-              ))}
-              {Array.from({ length: emptySlots2 }).map((_, idx) => (
-                <button
-                  key={`empty-t2-${idx}`}
-                  onClick={() => {
-                    setSubstituirTarget({ timeIndex: 2, slotIndex: idx });
-                    setShowSubstituirModal(true);
-                  }}
-                  className="w-full py-1.5 px-2 border border-dashed border-blue-300 rounded-lg text-left text-[10px] font-bold text-blue-500 hover:bg-blue-100/50 transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  <UserPlus size={10} />
-                  <span>Vaga Disponível</span>
-                </button>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          <button
-            onClick={handleFinalizarJogo}
-            disabled={placarTime1 === placarTime2}
-            className="w-full py-3 bg-gradient-to-r from-red-600 to-red-750 hover:from-red-600 hover:to-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg active:scale-98 transition-all text-xs flex justify-center items-center gap-1.5"
-          >
-            <CheckCircle size={16} />
-            <span>Finalizar Partida</span>
-          </button>
-        </div>
-      )}
-
-      {/* EXIBIÇÃO ESTIMADA DO PRÓXIMO TIME */}
-      {isJogoAtivo && estimadoProximoTime.length > 0 && (
-        <div className="glass p-4 rounded-xl border border-slate-150 space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <Sparkles size={12} className="text-red-400" />
-              Estimativa do Próximo Time
-            </span>
-            <span className="text-[10px] text-slate-500">
-              Aguardando: {jogadoresFila.length}
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {estimadoProximoTime.map((p) => (
-              <span
-                key={p.id}
-                className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700"
+              <button
+                onClick={handleFinalizarJogo}
+                disabled={placarTime1 === placarTime2}
+                className="w-full py-3 bg-gradient-to-r from-red-600 to-red-750 hover:from-red-600 hover:to-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg active:scale-98 transition-all text-xs flex justify-center items-center gap-1.5"
               >
-                {p.nome} <span className="text-[9px] text-slate-500 font-normal">({p.prioridade})</span>
-              </span>
-            ))}
-          </div>
-          {jogadoresFila.length > config.numberOfPlayers && (
-            <div className="pt-2.5 border-t border-dashed border-slate-150 space-y-1.5">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
-                Restante da Fila ({jogadoresFila.length - config.numberOfPlayers})
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {filaOrdenada.slice(config.numberOfPlayers).map((p) => (
+                <CheckCircle size={16} />
+                <span>Finalizar Partida</span>
+              </button>
+            </div>
+          )}
+
+          {/* EXIBIÇÃO ESTIMADA DO PRÓXIMO TIME */}
+          {isJogoAtivo && estimadoProximoTime.length > 0 && (
+            <div className="glass p-4 rounded-xl border border-slate-150 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-red-400" />
+                  Estimativa do Próximo Time
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  Aguardando: {jogadoresFila.length}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {estimadoProximoTime.map((p) => (
                   <span
                     key={p.id}
-                    className="px-2 py-0.5 rounded-md bg-slate-100/40 border border-slate-150 text-[10px] text-slate-500 font-medium"
+                    className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700"
                   >
-                    {p.nome} <span className="text-[8px] text-slate-450">({p.prioridade})</span>
+                    {p.nome} <span className="text-[9px] text-slate-500 font-normal">({p.prioridade})</span>
                   </span>
                 ))}
               </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ADICIONAR JOGADOR AO EVENTO */}
-      <form onSubmit={handleAddJogador} className="flex gap-2 relative">
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            placeholder="Nome do jogador..."
-            value={novoNome}
-            onChange={(e) => handleInputChange(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/30 placeholder-slate-650"
-          />
-
-          {/* Lista de Sugestões Auto-complete */}
-          {sugestoes.length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-150 rounded-xl shadow-xl z-50 overflow-hidden max-h-48 overflow-y-auto">
-              {sugestoes.map((user) => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => handleSelectSugestao(user)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0 cursor-pointer"
-                >
-                  {user.foto ? (
-                    <img src={user.foto} alt={user.nome} className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
-                      {user.nome[0].toUpperCase()}
-                    </div>
-                  )}
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-bold text-slate-800 truncate">{user.nome}</span>
-                    <span className="text-[10px] text-slate-450 truncate">{user.email}</span>
+              {jogadoresFila.length > config.numberOfPlayers && (
+                <div className="pt-2.5 border-t border-dashed border-slate-150 space-y-1.5">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                    Restante da Fila ({jogadoresFila.length - config.numberOfPlayers})
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filaOrdenada.slice(config.numberOfPlayers).map((p) => (
+                      <span
+                        key={p.id}
+                        className="px-2 py-0.5 rounded-md bg-slate-100/40 border border-slate-150 text-[10px] text-slate-500 font-medium"
+                      >
+                        {p.nome} <span className="text-[8px] text-slate-450">({p.prioridade})</span>
+                      </span>
+                    ))}
                   </div>
-                </button>
-              ))}
+                </div>
+              )}
             </div>
           )}
-        </div>
-        <button
-          type="submit"
-          className="p-3 bg-red-600 hover:bg-red-500 text-white rounded-xl active:scale-95 transition-all shadow-md flex-shrink-0 cursor-pointer flex items-center justify-center"
-        >
-          <UserPlus size={18} />
-        </button>
-      </form>
+
+          {/* ADICIONAR JOGADOR AO EVENTO */}
+          <form onSubmit={handleAddJogador} className="flex gap-2 relative">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                placeholder="Nome do jogador..."
+                value={novoNome}
+                onChange={(e) => handleInputChange(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/30 placeholder-slate-650"
+              />
+
+              {/* Lista de Sugestões Auto-complete */}
+              {sugestoes.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-150 rounded-xl shadow-xl z-50 overflow-hidden max-h-48 overflow-y-auto">
+                  {sugestoes.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => handleSelectSugestao(user)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0 cursor-pointer"
+                    >
+                      {user.foto ? (
+                        <img src={user.foto} alt={user.nome} className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                          {user.nome[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-slate-800 truncate">{user.nome}</span>
+                        <span className="text-[10px] text-slate-450 truncate">{user.email}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="submit"
+              className="p-3 bg-red-600 hover:bg-red-500 text-white rounded-xl active:scale-95 transition-all shadow-md flex-shrink-0 cursor-pointer flex items-center justify-center"
+            >
+              <UserPlus size={18} />
+            </button>
+          </form>
+        </>
+      )}
 
       {/* LISTA GERAL DE JOGADORES PRESENTES/FILA */}
       <div className="glass p-5 rounded-2xl border border-slate-200 space-y-4">
