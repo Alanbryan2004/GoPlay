@@ -22,6 +22,8 @@ import GruposList from './features/grupos/GruposList';
 import RankingList from './features/ranking/RankingList';
 import AmigosList from './features/amigos/AmigosList';
 import Home from './features/home/Home';
+import ComunidadesList from './features/comunidades/ComunidadesList';
+import ComunidadeDetails from './features/comunidades/ComunidadeDetails';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,6 +78,8 @@ function AppContent() {
           <Route path="/ranking" element={<RankingList />} />
           <Route path="/amigos" element={<AmigosList />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/comunidades" element={<ComunidadesList />} />
+          <Route path="/comunidades/:id" element={<ComunidadeDetails />} />
           
           {/* Rota Fallback */}
           <Route path="*" element={<Navigate to={user ? "/" : "/login"} replace />} />

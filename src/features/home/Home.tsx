@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Users, Trophy, UserPlus, PlayCircle, ToggleRight, Sparkles } from 'lucide-react';
+import { Calendar, Users, Trophy, UserPlus, PlayCircle, ToggleRight, Sparkles, Network } from 'lucide-react';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -7,7 +7,7 @@ export default function Home() {
   const cards = [
     { label: 'Eventos', icon: Calendar, path: '/eventos', color: 'text-red-500 bg-red-50' },
     { label: 'Grupos', icon: Users, path: '/grupos', color: 'text-blue-500 bg-blue-50' },
-    { label: 'Comunidades', icon: Users, path: '/grupos', color: 'text-emerald-500 bg-emerald-50' },
+    { label: 'Comunidades', icon: Network, path: '/comunidades', color: 'text-emerald-500 bg-emerald-50' },
     { label: 'Ranking', icon: Trophy, path: '/ranking', color: 'text-amber-500 bg-amber-50' },
     { label: 'Amigos', icon: UserPlus, path: '/amigos', color: 'text-violet-500 bg-violet-50' },
     { label: 'Placar', icon: ToggleRight, path: '/eventos', color: 'text-cyan-500 bg-cyan-50' },

@@ -102,3 +102,26 @@ export interface Amigo {
   foto?: string;
   created_at?: string;
 }
+
+export interface Comunidade {
+  id: string;
+  nome: string;
+  descricao?: string;
+  foto?: string;
+  criador_id: string;
+  publica: boolean;
+  created_at?: string;
+  // Campos computados (join)
+  grupos?: ComunidadeGrupo[];
+  total_grupos?: number;
+  total_membros?: number;
+}
+
+export interface ComunidadeGrupo {
+  id: string;
+  comunidade_id: string;
+  grupo_id: string;
+  adicionado_em?: string;
+  // Join
+  grupo?: Grupo;
+}

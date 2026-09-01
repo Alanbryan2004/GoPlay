@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Modalidade } from '../../types';
-import { Calendar, MapPin, AlignLeft, Activity, ArrowLeft } from 'lucide-react';
+import { Calendar, MapPin, AlignLeft, Activity, ArrowLeft, Network } from 'lucide-react';
 import dayjs from 'dayjs';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/utc';
@@ -14,6 +14,7 @@ export default function NovoEvento() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const grupoId = searchParams.get('grupo_id');
+  const comunidadeId = searchParams.get('comunidade_id');
 
   const [descricao, setDescricao] = useState('');
   const [local, setLocal] = useState('');
@@ -29,11 +30,15 @@ export default function NovoEvento() {
   const [isPublico, setIsPublico] = useState(true);
   const [selectedGrupoId, setSelectedGrupoId] = useState('');
   const [grupoNome, setGrupoNome] = useState('');
+  const [comunidadeNome, setComunidadeNome] = useState('');
 
   useEffect(() => {
     fetchModalidades().then(() => {
-      // Após carregar modalidades, buscar a padrão com base no último evento
-      if (grupoId) {
+      if (comunidadeId) {
+        setIsPublico(true); // Evento de comunidade é público
+        fetchComunidadeNome(comunidadeId);
+        fetchDefaultModality(null);
+      } else if (grupoId) {
         setIsPublico(false);
         setSelectedGrupoId(grupoId);
         fetchGrupoNome(grupoId);
@@ -42,7 +47,14 @@ export default function NovoEvento() {
         fetchDefaultModality(null);
       }
     });
-  }, [grupoId]);
+  }, [grupoId, comunidadeId]);
+
+  const fetchComunidadeNome = async (cid: string) => {
+    try {
+      const { data } = await supabase.from('comunidades').select('nome').eq('id', cid).single();
+      if (data) setComunidadeNome(data.nome);
+    } catch (e) { console.error(e); }
+  };
 
   const fetchGrupoNome = async (gid: string) => {
     try {
@@ -146,13 +158,17 @@ export default function NovoEvento() {
       const utcDate = dayjs.tz(dataHoraStr, fusoBrasil).utc().format();
 
       // Configuração padrão do sorteio
-      const defaultConfig = {
+      const defaultConfig: Record<string, any> = {
         numberOfTeams: 2,
         numberOfPlayers: 6,
         useRating: false,
         maxNumberOfVictories: 3,
         actionAfterVictories: 1, // Mesclar por padrão
       };
+      // Vincular comunidade ao evento via JSONB (sem migration na tabela eventos)
+      if (comunidadeId) {
+        defaultConfig.comunidade_id = comunidadeId;
+      }
 
       const newEvento = {
         usuario_id: resolvedUserId,
@@ -172,7 +188,7 @@ export default function NovoEvento() {
       const { error } = await supabase.from('eventos').insert(newEvento);
 
       if (!error) {
-        navigate(grupoId ? `/eventos?grupo_id=${grupoId}` : '/eventos');
+        navigate(comunidadeId ? `/comunidades/${comunidadeId}` : grupoId ? `/eventos?grupo_id=${grupoId}` : '/eventos');
       } else {
         setErro(error.message);
       }
@@ -199,6 +215,17 @@ export default function NovoEvento() {
         {erro && (
           <div className="flex items-center gap-2 mb-4 p-3 bg-red-950/40 border border-red-500/30 text-red-700 rounded-xl text-sm">
             <span>{erro}</span>
+          </div>
+        )}
+
+        {/* Badge de Comunidade */}
+        {comunidadeId && comunidadeNome && (
+          <div className="flex items-center gap-2 mb-3 px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+            <Network size={14} className="text-emerald-500 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider">Evento de Comunidade</p>
+              <p className="text-sm font-black text-emerald-700 truncate">{comunidadeNome}</p>
+            </div>
           </div>
         )}
 

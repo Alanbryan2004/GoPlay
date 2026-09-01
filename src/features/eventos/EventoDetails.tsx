@@ -178,7 +178,40 @@ export default function EventoDetails() {
         }
 
         // Unir todos os IDs permitidos (eu mesmo + amigos + membros dos grupos)
-        const allowedIds = Array.from(new Set([loggedId, ...friendIds, ...groupMemberIds]));
+        let allowedIds = Array.from(new Set([loggedId, ...friendIds, ...groupMemberIds]));
+
+        // Se o evento for de uma comunidade, adicionar todos os membros aprovados dos grupos da comunidade
+        try {
+          const { data: evWithConfig } = await supabase
+            .from('eventos')
+            .select('configuracao')
+            .eq('id', id)
+            .single();
+
+          const comunidadeId = (evWithConfig?.configuracao as any)?.comunidade_id;
+          if (comunidadeId) {
+            const { data: cgRows } = await supabase
+              .from('comunidade_grupos')
+              .select('grupo_id')
+              .eq('comunidade_id', comunidadeId);
+
+            if (cgRows && cgRows.length > 0) {
+              const cgIds = cgRows.map((cg: any) => cg.grupo_id);
+              const { data: comMembros } = await supabase
+                .from('membros_grupo')
+                .select('usuario_id')
+                .in('grupo_id', cgIds)
+                .eq('status', 'aprovado');
+
+              if (comMembros) {
+                const comMemberIds = comMembros.map((m: any) => m.usuario_id);
+                allowedIds = Array.from(new Set([...allowedIds, ...comMemberIds]));
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Aviso: não foi possível carregar membros da comunidade:', e);
+        }
 
         if (allowedIds.length > 0) {
           const { data: allowedUsers, error: usersError } = await supabase
