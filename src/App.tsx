@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuth } from './hooks/useAuth';
+import VersionGuard from './components/common/VersionGuard';
 
 // Layout Components
 import Header from './components/layout/Header';
@@ -56,6 +57,8 @@ function AppContent() {
 
   return (
     <div className="w-full max-w-md mx-auto min-h-screen bg-white text-slate-900 border-x border-slate-100 shadow-2xl flex flex-col relative pb-16">
+      {/* Verificador de nova versão — recarrega automaticamente quando há deploy novo */}
+      <VersionGuard />
       {/* Exibir Header em todas as rotas logadas */}
       {!isAuthRoute && <Header />}
       
