@@ -296,6 +296,12 @@ export default function EventoDetails() {
               setVitoriasTime1(ev.vitorias_time1 || 0);
               setVitoriasTime2(ev.vitorias_time2 || 0);
               if (ev.configuracao) setConfig(ev.configuracao);
+
+              // Se o evento foi finalizado remotamente, exibir a tela de resultado (Pódio) para este usuário também!
+              if (ev.configuracao?.finalizado) {
+                setPodiumStep(1);
+                setShowPodium(true);
+              }
             }
           }
         }

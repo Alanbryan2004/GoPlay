@@ -11,6 +11,7 @@ interface NotificationCounts {
   newEvents: number;         // Novos eventos criados desde a última visita
   groupRequests: number;     // Solicitações de entrada em grupo pendentes
   rankingChange: boolean;    // Houve mudança de posição no ranking recentemente
+  finishedEvents: number;    // Eventos recém finalizados não vistos
 }
 
 const LAST_SEEN_EVENTS_KEY = 'goplay_last_seen_events';
@@ -31,11 +32,12 @@ export default function Header() {
     newEvents: 0,
     groupRequests: 0,
     rankingChange: false,
+    finishedEvents: 0,
   });
   const [showNotifPanel, setShowNotifPanel] = useState(false);
 
   const totalNotifs =
-    notifs.friendRequests + notifs.newEvents + notifs.groupRequests + (notifs.rankingChange ? 1 : 0);
+    notifs.friendRequests + notifs.newEvents + notifs.groupRequests + (notifs.rankingChange ? 1 : 0) + notifs.finishedEvents;
 
   useEffect(() => {
     async function getProfile() {
@@ -184,11 +186,41 @@ export default function Header() {
         }
       }
 
+      // 5. Eventos encerrados recentemente onde o usuário participou
+      let finishedEventsCount = 0;
+      const lastSeenFinishedKey = `goplay_last_seen_finished_${userId}`;
+      const lastSeenFinishedStr = localStorage.getItem(lastSeenFinishedKey);
+      const lastSeenFinished = lastSeenFinishedStr ? new Date(lastSeenFinishedStr).toISOString() : null;
+
+      if (lastSeenFinished) {
+        const { data: allFinished } = await supabase
+          .from('eventos')
+          .select('id, participantes, configuracao')
+          .neq('usuario_id', userId); // Eventos que outros encerraram
+
+        if (allFinished) {
+          const userFinishedEvents = allFinished.filter((ev: any) => {
+            if (!ev.configuracao?.finalizado) return false;
+            const ultimoSorteio = ev.configuracao?.ultimo_sorteio;
+            // Checar se foi finalizado após o último visto
+            const ts = ultimoSorteio?.timestamp || ev.created_at;
+            if (ts && new Date(ts) <= new Date(lastSeenFinished)) return false;
+
+            // Checar se o usuário participa deste evento
+            return Array.isArray(ev.participantes) && ev.participantes.some((p: any) => p.id === userId);
+          });
+          finishedEventsCount = userFinishedEvents.length;
+        }
+      } else {
+        localStorage.setItem(lastSeenFinishedKey, new Date().toISOString());
+      }
+
       setNotifs({
         friendRequests: friendCount || 0,
         newEvents: newEventsCount,
         groupRequests: groupRequestsCount,
         rankingChange: rankingChanged,
+        finishedEvents: finishedEventsCount,
       });
     } catch (e) {
       console.error('Erro ao buscar notificações:', e);
@@ -436,6 +468,30 @@ export default function Header() {
                       </div>
                       <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">
                         {notifs.groupRequests}
+                      </span>
+                    </button>
+                  )}
+
+                  {notifs.finishedEvents > 0 && (
+                    <button
+                      onClick={() => {
+                        setShowNotifPanel(false);
+                        setDrawerOpen(false);
+                        if (currentUserId) localStorage.setItem(`goplay_last_seen_finished_${currentUserId}`, new Date().toISOString());
+                        setNotifs(prev => ({ ...prev, finishedEvents: 0 }));
+                        navigate('/eventos');
+                      }}
+                      className="w-full flex items-center gap-2.5 p-2 bg-white rounded-xl border border-emerald-200 hover:border-emerald-400 transition-all text-left"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <Trophy size={13} className="text-emerald-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-slate-700">Evento Encerrado!</p>
+                        <p className="text-[10px] text-slate-500">Confira a classificação e pódio final</p>
+                      </div>
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500 text-white text-[9px] font-black flex items-center justify-center">
+                        {notifs.finishedEvents}
                       </span>
                     </button>
                   )}
