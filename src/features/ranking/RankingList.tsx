@@ -15,10 +15,25 @@ export default function RankingList() {
   // Estados dos Filtros
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [modalidades, setModalidades] = useState<Modalidade[]>([]);
-  const [selectedGrupoId, setSelectedGrupoId] = useState<string>('');
-  const [selectedModalidadeId, setSelectedModalidadeId] = useState<string>('');
+  // Carregar filtros salvos no localStorage se existirem
+  const [selectedGrupoId, setSelectedGrupoId] = useState<string>(
+    () => localStorage.getItem('goplay_ranking_selected_grupo') || ''
+  );
+  const [selectedModalidadeId, setSelectedModalidadeId] = useState<string>(
+    () => localStorage.getItem('goplay_ranking_selected_modalidade') || ''
+  );
   // IDs dos grupos que o usuário participa (usado para filtrar ranking geral)
   const [allowedGroupIds, setAllowedGroupIds] = useState<string[]>([]);
+
+  const handleGrupoChange = (gid: string) => {
+    setSelectedGrupoId(gid);
+    localStorage.setItem('goplay_ranking_selected_grupo', gid);
+  };
+
+  const handleModalidadeChange = (mid: string) => {
+    setSelectedModalidadeId(mid);
+    localStorage.setItem('goplay_ranking_selected_modalidade', mid);
+  };
 
   useEffect(() => {
     initFiltersAndContext();
@@ -78,7 +93,16 @@ export default function RankingList() {
         if (dbModalidades) setModalidades(dbModalidades as Modalidade[]);
       }
 
-      // 4. Buscar o último evento em que o usuário participou para definir grupo e modalidade padrão
+      // 4. Se o usuário já tiver uma preferência salva no localStorage, não sobrescrever!
+      const savedGrupo = localStorage.getItem('goplay_ranking_selected_grupo');
+      const savedModalidade = localStorage.getItem('goplay_ranking_selected_modalidade');
+
+      if (savedGrupo !== null && savedGrupo !== '') {
+        // Já tem preferência salva
+        return;
+      }
+
+      // Se não tem nada no localStorage, buscar o último evento disputado
       const { data: events } = await supabase
         .from('eventos')
         .select('grupo_id, modalidade_id, participantes')
@@ -96,11 +120,18 @@ export default function RankingList() {
         });
 
         if (lastEvent) {
-          if (lastEvent.grupo_id) setSelectedGrupoId(lastEvent.grupo_id);
-          if (lastEvent.modalidade_id) setSelectedModalidadeId(lastEvent.modalidade_id);
+          if (lastEvent.grupo_id) {
+            setSelectedGrupoId(lastEvent.grupo_id);
+            localStorage.setItem('goplay_ranking_selected_grupo', lastEvent.grupo_id);
+          }
+          if (lastEvent.modalidade_id && !savedModalidade) {
+            setSelectedModalidadeId(lastEvent.modalidade_id);
+            localStorage.setItem('goplay_ranking_selected_modalidade', lastEvent.modalidade_id);
+          }
         } else if (userGroupIds.length > 0) {
           // Se não jogou em nenhum evento ainda, seleciona o primeiro grupo que ele pertence
           setSelectedGrupoId(userGroupIds[0]);
+          localStorage.setItem('goplay_ranking_selected_grupo', userGroupIds[0]);
         }
       }
     } catch (e) {
@@ -249,7 +280,7 @@ export default function RankingList() {
           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Grupo</label>
           <select
             value={selectedGrupoId}
-            onChange={(e) => setSelectedGrupoId(e.target.value)}
+            onChange={(e) => handleGrupoChange(e.target.value)}
             className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer shadow-xs"
           >
             <option value="">Todos os Grupos</option>
@@ -265,7 +296,7 @@ export default function RankingList() {
           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Modalidade</label>
           <select
             value={selectedModalidadeId}
-            onChange={(e) => setSelectedModalidadeId(e.target.value)}
+            onChange={(e) => handleModalidadeChange(e.target.value)}
             className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer shadow-xs"
           >
             <option value="">Todas as Modalidades</option>
