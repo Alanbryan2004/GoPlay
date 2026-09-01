@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Torneio, TorneioConfronto } from '../../types/torneio';
-import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck } from 'lucide-react';
+import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
+import Dialog from '../../components/common/Dialog';
 
 export default function TorneioDetails() {
   const { id } = useParams<{ id: string }>();
@@ -16,13 +17,46 @@ export default function TorneioDetails() {
   const [showDrawAnimation, setShowDrawAnimation] = useState(false);
   const [editDateModal, setEditDateModal] = useState(false);
   
+  // Modal de Avisos e Confirmações elegante (Dialog)
+  const [dialog, setDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'alert' | 'confirm';
+    onConfirm: () => void;
+    onCancel?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'alert',
+    onConfirm: () => {},
+  });
+
+  // Modal para Adicionar Jogadores aos Inscritos ou aos Times Fechados
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [targetTeamId, setTargetTeamId] = useState<string | null>(null); // null = inscritos gerais, id = time específico
+  const [todasPessoas, setTodasPessoas] = useState<any[]>([]);
+  const [buscaAtleta, setBuscaAtleta] = useState('');
+  const [sugestoesAtletas, setSugestoesAtletas] = useState<any[]>([]);
+
   // Edição de data/hora
   const [editInicio, setEditInicio] = useState('');
   const [editFim, setEditFim] = useState('');
 
   useEffect(() => {
     fetchTorneio();
+    loadTodasPessoas();
   }, [id]);
+
+  const loadTodasPessoas = async () => {
+    try {
+      const { data } = await supabase.from('usuarios').select('id, nome, foto, email');
+      if (data) setTodasPessoas(data);
+    } catch (e) {
+      console.error('Erro ao carregar usuários:', e);
+    }
+  };
 
   const fetchTorneio = async () => {
     setLoading(true);
@@ -45,40 +79,166 @@ export default function TorneioDetails() {
     }
   };
 
-  const handleExcluirTorneio = async () => {
+  const handleExcluirTorneio = () => {
     if (!torneio) return;
-    if (!window.confirm(`Tem certeza que deseja excluir o torneio "${torneio.nome}"?`)) return;
+    setDialog({
+      isOpen: true,
+      title: 'Excluir Torneio',
+      message: `Tem certeza que deseja excluir o torneio "${torneio.nome}"? Esta ação não poderá ser desfeita.`,
+      type: 'confirm',
+      onCancel: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setDialog((prev) => ({ ...prev, isOpen: false }));
+        try {
+          await supabase.from('torneios').delete().eq('id', torneio.id);
+          navigate('/torneios');
+        } catch (e: any) {
+          setDialog({
+            isOpen: true,
+            title: 'Erro ao Excluir',
+            message: e.message || 'Não foi possível excluir o torneio.',
+            type: 'alert',
+            onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+          });
+        }
+      },
+    });
+  };
 
-    try {
-      await supabase.from('torneios').delete().eq('id', torneio.id);
-      navigate('/torneios');
-    } catch (e: any) {
-      alert('Erro ao excluir torneio: ' + e.message);
+  // Buscar sugestões ao digitar no campo de atleta
+  const handleBuscaChange = (txt: string) => {
+    setBuscaAtleta(txt);
+    if (!txt.trim()) {
+      setSugestoesAtletas([]);
+      return;
     }
+
+    const filtrados = todasPessoas.filter((p) =>
+      p.nome.toLowerCase().includes(txt.toLowerCase()) ||
+      p.email?.toLowerCase().includes(txt.toLowerCase())
+    );
+    setSugestoesAtletas(filtrados.slice(0, 5));
+  };
+
+  // Adicionar Atleta (Geral ou para um Time Específico)
+  const handleAdicionarAtleta = async (atleta: any) => {
+    if (!torneio) return;
+
+    if (targetTeamId) {
+      // Adicionar a um Time Fechado Específico
+      const novosTimes = torneio.times.map((t) => {
+        if (t.id === targetTeamId) {
+          const jogadores = t.jogadores || [];
+          if (jogadores.some((j) => j.id === atleta.id)) return t;
+          return { ...t, jogadores: [...jogadores, { id: atleta.id, nome: atleta.nome }] };
+        }
+        return t;
+      });
+
+      // Também inclui na lista geral de participantes inscritos caso não esteja
+      const participantes = torneio.participantes || [];
+      const novosParticipantes = participantes.some((p) => p.id === atleta.id)
+        ? participantes
+        : [...participantes, { id: atleta.id, nome: atleta.nome, foto: atleta.foto || '' }];
+
+      const updates = { times: novosTimes, participantes: novosParticipantes };
+      setTorneio({ ...torneio, ...updates });
+      await supabase.from('torneios').update(updates).eq('id', torneio.id);
+    } else {
+      // Adicionar aos Inscritos Gerais
+      const participantes = torneio.participantes || [];
+      if (participantes.some((p) => p.id === atleta.id)) {
+        setDialog({
+          isOpen: true,
+          title: 'Aviso',
+          message: `${atleta.nome} já está inscrito neste torneio.`,
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+        return;
+      }
+
+      const novosParticipantes = [...participantes, { id: atleta.id, nome: atleta.nome, foto: atleta.foto || '' }];
+      const updates = { participantes: novosParticipantes };
+      setTorneio({ ...torneio, ...updates });
+      await supabase.from('torneios').update(updates).eq('id', torneio.id);
+    }
+
+    setBuscaAtleta('');
+    setSugestoesAtletas([]);
+    setShowAddUserModal(false);
+  };
+
+  // Remover Atleta dos Inscritos Gerais
+  const handleRemoverParticipante = async (participanteId: string) => {
+    if (!torneio) return;
+    const novosParticipantes = (torneio.participantes || []).filter((p) => p.id !== participanteId);
+    
+    // Também limpa dos times fechados se tiver
+    const novosTimes = torneio.times.map((t) => ({
+      ...t,
+      jogadores: (t.jogadores || []).filter((j) => j.id !== participanteId),
+    }));
+
+    const updates = { participantes: novosParticipantes, times: novosTimes };
+    setTorneio({ ...torneio, ...updates });
+    await supabase.from('torneios').update(updates).eq('id', torneio.id);
+  };
+
+  // Remover Atleta de um Time Fechado específico
+  const handleRemoverAtletaDoTime = async (teamId: string, jogadorId: string) => {
+    if (!torneio) return;
+    const novosTimes = torneio.times.map((t) => {
+      if (t.id === teamId) {
+        return { ...t, jogadores: (t.jogadores || []).filter((j) => j.id !== jogadorId) };
+      }
+      return t;
+    });
+
+    const updates = { times: novosTimes };
+    setTorneio({ ...torneio, ...updates });
+    await supabase.from('torneios').update(updates).eq('id', torneio.id);
   };
 
   // Algoritmo de Sorteio de Chaveamento / Pontos Corridos
   const handleSortearChaveamento = async () => {
     if (!torneio) return;
 
-    // VALIDAÇÃO EXIGIDA: Verificar se já atingiu a lista mínima de inscritos/jogadores de cada time
     const totalTimes = torneio.quantidade_times || 4;
     const porTime = torneio.jogadores_por_time || 2;
     const minJogadoresNecessarios = totalTimes * porTime;
     const inscritos = torneio.participantes || [];
 
-    // Se os times forem sorteados, exige quantidade total de inscritos
+    // Se os times forem por sorteio, valida se a lista completa de atletas foi preenchida
     if (torneio.tipo_times === 'sorteio' && inscritos.length < minJogadoresNecessarios) {
-      alert(
-        `Não é possível sortear o chaveamento ainda!\n\nO torneio precisa de no mínimo ${minJogadoresNecessarios} jogadores inscritos (${porTime} por time em ${totalTimes} times).\nAtualmente existem ${inscritos.length} jogador(es) inscrito(s).`
-      );
+      setDialog({
+        isOpen: true,
+        title: 'Jogadores Insuficientes',
+        message: `Não é possível sortear o chaveamento ainda!\n\nO torneio necessita de no mínimo ${minJogadoresNecessarios} atletas inscritos (${porTime} por time em ${totalTimes} times).\nAtualmente existem apenas ${inscritos.length} atleta(s) inscrito(s).`,
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
       return;
+    }
+
+    // Se for times fechados, valida se todos os times já tem seus jogadores definidos
+    if (torneio.tipo_times === 'fechado') {
+      const timeIncompleto = torneio.times.find((t) => (t.jogadores?.length || 0) < porTime);
+      if (timeIncompleto) {
+        setDialog({
+          isOpen: true,
+          title: 'Times Incompletos',
+          message: `Não é possível sortear o chaveamento ainda!\n\nO time "${timeIncompleto.nome}" possui apenas ${timeIncompleto.jogadores?.length || 0} de ${porTime} jogadores definidos. Monte todos os times antes de realizar o sorteio.`,
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+        return;
+      }
     }
 
     setSorteando(true);
     setShowDrawAnimation(true);
 
-    // Se for sorteio de times a partir dos participantes inscritos:
     let finalTimes = [...torneio.times];
     if (torneio.tipo_times === 'sorteio' && inscritos.length >= minJogadoresNecessarios) {
       const inscritosEmbaralhados = [...inscritos].sort(() => Math.random() - 0.5);
@@ -306,31 +466,103 @@ export default function TorneioDetails() {
             Jogadores Inscritos ({torneio.participantes?.length || 0}/{(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)})
           </h3>
 
-          <span className="text-[10px] font-bold text-slate-400">
-            {torneio.participantes?.length || 0} de {(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)} vagas
-          </span>
+          <button
+            onClick={() => {
+              setTargetTeamId(null);
+              setShowAddUserModal(true);
+            }}
+            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95"
+          >
+            <Plus size={12} />
+            <span>Adicionar Atleta</span>
+          </button>
         </div>
 
         {/* Lista visual dos atletas inscritos */}
         {torneio.participantes && torneio.participantes.length > 0 ? (
           <div className="grid grid-cols-2 gap-2">
             {torneio.participantes.map((p) => (
-              <div key={p.id} className="p-2 rounded-xl bg-slate-50 border border-slate-150 flex items-center gap-2 truncate">
-                {p.foto ? (
-                  <img src={p.foto} alt={p.nome} className="w-6 h-6 rounded-full object-cover shrink-0" />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px] shrink-0">
-                    {p.nome.charAt(0)}
-                  </div>
-                )}
-                <span className="text-xs font-bold text-slate-800 truncate">{p.nome}</span>
+              <div key={p.id} className="p-2 rounded-xl bg-slate-50 border border-slate-150 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 truncate">
+                  {p.foto ? (
+                    <img src={p.foto} alt={p.nome} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px] shrink-0">
+                      {p.nome.charAt(0)}
+                    </div>
+                  )}
+                  <span className="text-xs font-bold text-slate-800 truncate">{p.nome}</span>
+                </div>
+                <button
+                  onClick={() => handleRemoverParticipante(p.id)}
+                  className="p-1 text-slate-300 hover:text-red-500 rounded-lg transition-colors shrink-0 cursor-pointer"
+                  title="Remover Atleta"
+                >
+                  <Trash2 size={12} />
+                </button>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-400 py-2">Nenhum jogador cadastrado ainda.</p>
+          <p className="text-xs text-slate-400 py-2">Nenhum jogador cadastrado ainda. Clique em "+ Adicionar Atleta" para inscrever os participantes.</p>
         )}
       </div>
+
+      {/* SE FOR TIMES FECHADOS: Painel de Escalação de Cada Time */}
+      {torneio.tipo_times === 'fechado' && (
+        <div className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-left">
+          <h3 className="font-black text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+            <Users size={14} className="text-amber-500" />
+            Escalação dos Times Fechados ({torneio.jogadores_por_time || 2} atletas por time)
+          </h3>
+
+          <div className="grid grid-cols-2 gap-3">
+            {torneio.times.map((time) => {
+              const jogadoresCount = time.jogadores?.length || 0;
+              const maxJogadores = torneio.jogadores_por_time || 2;
+              const isCompleto = jogadoresCount >= maxJogadores;
+
+              return (
+                <div key={time.id} className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <div className="flex justify-between items-center pb-1 border-b border-slate-200">
+                    <span className="font-black text-xs text-slate-800 truncate">{time.nome}</span>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isCompleto ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+                      {jogadoresCount}/{maxJogadores}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    {(time.jogadores || []).map((j) => (
+                      <div key={j.id} className="flex justify-between items-center text-xs font-semibold text-slate-700 bg-white p-1.5 rounded-lg border border-slate-150">
+                        <span className="truncate">{j.nome}</span>
+                        <button
+                          onClick={() => handleRemoverAtletaDoTime(time.id, j.id)}
+                          className="text-slate-300 hover:text-red-500 transition-colors p-0.5"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    ))}
+
+                    {!isCompleto && (
+                      <button
+                        onClick={() => {
+                          setTargetTeamId(time.id);
+                          setShowAddUserModal(true);
+                        }}
+                        className="w-full py-1.5 border border-dashed border-amber-300 rounded-lg text-left text-[10px] font-bold text-amber-700 hover:bg-amber-50 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Plus size={10} />
+                        <span>Adicionar Atleta</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Visualização das Chaves / Confrontos */}
       {torneio.chaveamento.length === 0 ? (
@@ -454,6 +686,76 @@ export default function TorneioDetails() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Modal para Adicionar Jogadores aos Inscritos ou aos Times Fechados */}
+      <AnimatePresence>
+        {showAddUserModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <div className="bg-white p-5 rounded-2xl w-full max-w-xs space-y-4 shadow-2xl text-left">
+              <h3 className="font-black text-slate-900 text-base">
+                {targetTeamId ? 'Adicionar ao Time' : 'Inscrever Atleta'}
+              </h3>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase">Buscar Jogador pelo Nome</label>
+                <input
+                  type="text"
+                  value={buscaAtleta}
+                  onChange={(e) => handleBuscaChange(e.target.value)}
+                  placeholder="Digite o nome..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+
+                {/* Autocomplete de sugestões */}
+                {sugestoesAtletas.length > 0 && (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-lg bg-white divide-y divide-slate-100 max-h-40 overflow-y-auto">
+                    {sugestoesAtletas.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleAdicionarAtleta(p)}
+                        className="w-full p-2.5 text-left text-xs font-bold text-slate-800 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer"
+                      >
+                        {p.foto ? (
+                          <img src={p.foto} alt={p.nome} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px] shrink-0">
+                            {p.nome.charAt(0)}
+                          </div>
+                        )}
+                        <span className="truncate">{p.nome}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setShowAddUserModal(false)}
+                  className="w-full py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Diálogo Personalizado (Dialog) */}
+      <Dialog
+        isOpen={dialog.isOpen}
+        title={dialog.title}
+        message={dialog.message}
+        type={dialog.type}
+        onConfirm={dialog.onConfirm}
+        onCancel={dialog.onCancel}
+      />
     </div>
   );
 }
