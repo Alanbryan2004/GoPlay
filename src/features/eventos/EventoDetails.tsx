@@ -22,7 +22,8 @@ import {
   Share2,
   Skull,
   Crown,
-  Link2
+  Link2,
+  History
 } from 'lucide-react';
 import Dialog from '../../components/common/Dialog';
 import {
@@ -882,6 +883,24 @@ export default function EventoDetails() {
     const updatedTimePerdedor = time1Venceu ? updatedTime2 : updatedTime1;
     const updatedTimeGanhador = time1Venceu ? updatedTime1 : updatedTime2;
 
+    // Gravar histórico da partida no campo configuracao.historico_partidas
+    const novaPartidaLog = {
+      id: Date.now().toString(),
+      data: new Date().toISOString(),
+      placarTime1,
+      placarTime2,
+      time1: updatedTime1.map((p) => ({ id: p.id, nome: p.nome })),
+      time2: updatedTime2.map((p) => ({ id: p.id, nome: p.nome })),
+      vencedor: time1Venceu ? 1 : 2,
+    };
+
+    const historicoAtual = Array.isArray((config as any)?.historico_partidas)
+      ? (config as any).historico_partidas
+      : [];
+    const novoHistorico = [...historicoAtual, novaPartidaLog];
+    const updatedConfigWithHistory = { ...config, historico_partidas: novoHistorico };
+    setConfig(updatedConfigWithHistory);
+
     // Se o time vencedor atingir o limite de vitórias
     if (
       newVitoriasTime1 === config.maxNumberOfVictories ||
@@ -925,6 +944,7 @@ export default function EventoDetails() {
           vitorias_time1: 0,
           vitorias_time2: 0,
           participantes: novosParticipantes,
+          configuracao: updatedConfigWithHistory,
         });
         return;
       }
@@ -970,6 +990,7 @@ export default function EventoDetails() {
         vitorias_time1: 0,
         vitorias_time2: 0,
         participantes: novosParticipantes,
+        configuracao: updatedConfigWithHistory,
       });
     } else {
       // Jogo padrão: Mantém o vencedor e entra o novo time
@@ -986,6 +1007,7 @@ export default function EventoDetails() {
           vitorias_time1: newVitoriasTime1,
           vitorias_time2: 0,
           participantes: novosParticipantes,
+          configuracao: updatedConfigWithHistory,
         });
       } else {
         const winnerTime2 = updatedTime2.map((p) => ({ ...p, prioridade: 0 }));
@@ -1000,6 +1022,7 @@ export default function EventoDetails() {
           vitorias_time1: 0,
           vitorias_time2: newVitoriasTime2,
           participantes: novosParticipantes,
+          configuracao: updatedConfigWithHistory,
         });
       }
     }
@@ -1342,6 +1365,8 @@ export default function EventoDetails() {
     config.numberOfPlayers
   );
 
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[calc(100vh-8rem)]">
@@ -1407,6 +1432,13 @@ export default function EventoDetails() {
             title="Copiar link de convite"
           >
             <Link2 size={18} />
+          </button>
+          <button
+            onClick={() => setShowHistoryModal(true)}
+            className="p-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-slate-600 rounded-xl transition-all shadow-md cursor-pointer"
+            title="Histórico de Partidas"
+          >
+            <History size={18} />
           </button>
           <button
             onClick={() => setShowRanking(true)}
@@ -2468,6 +2500,82 @@ export default function EventoDetails() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE HISTÓRICO DE PARTIDAS DO EVENTO */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowHistoryModal(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-md bg-white rounded-t-3xl shadow-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-2" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History size={18} className="text-red-500" />
+                <h2 className="text-base font-black text-slate-900">Histórico de Partidas</h2>
+              </div>
+              <button onClick={() => setShowHistoryModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
+                <X size={18} />
+              </button>
+            </div>
+
+            {(() => {
+              const historico = (config as any)?.historico_partidas || [];
+              if (!Array.isArray(historico) || historico.length === 0) {
+                return (
+                  <div className="text-center py-8 text-slate-400">
+                    <History size={32} className="mx-auto mb-2 opacity-50" />
+                    <p className="text-xs font-semibold">Nenhuma partida finalizada neste evento ainda.</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-3">
+                  {historico.map((partida: any, idx: number) => (
+                    <div key={partida.id || idx} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        <span>Partida #{idx + 1}</span>
+                        <span>{dayjs(partida.data).format('HH:mm:ss')}</span>
+                      </div>
+
+                      {/* Placar e Times */}
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {/* Time 1 */}
+                        <div className={`p-2.5 rounded-xl border ${partida.vencedor === 1 ? 'bg-red-50 border-red-200 text-red-900 font-black' : 'bg-white border-slate-200 text-slate-600'}`}>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold">Time A</span>
+                            <span className="text-sm font-black">{partida.placarTime1}</span>
+                          </div>
+                          <div className="text-[10px] space-y-0.5 opacity-80 font-normal">
+                            {(partida.time1 || []).map((p: any) => (
+                              <div key={p.id}>{p.nome}</div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Time 2 */}
+                        <div className={`p-2.5 rounded-xl border ${partida.vencedor === 2 ? 'bg-blue-50 border-blue-200 text-blue-900 font-black' : 'bg-white border-slate-200 text-slate-600'}`}>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold">Time B</span>
+                            <span className="text-sm font-black">{partida.placarTime2}</span>
+                          </div>
+                          <div className="text-[10px] space-y-0.5 opacity-80 font-normal">
+                            {(partida.time2 || []).map((p: any) => (
+                              <div key={p.id}>{p.nome}</div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

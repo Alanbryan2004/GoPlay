@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Evento } from '../../types';
-import { Plus, Trash2, Calendar, MapPin, Search, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Calendar, MapPin, Search, ChevronRight, History, CheckCircle2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import Dialog from '../../components/common/Dialog';
@@ -13,6 +13,9 @@ export default function EventosList() {
   const grupoId = searchParams.get('grupo_id');
 
   const [eventos, setEventos] = useState<Evento[]>([]);
+  const [historicoEventos, setHistoricoEventos] = useState<Evento[]>([]);
+  const [activeTab, setActiveTab] = useState<'ativos' | 'historico'>('ativos');
+  const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -166,10 +169,14 @@ export default function EventosList() {
         }
       }
 
-      const { data, error } = await query.order('data', { ascending: true });
+      const { data, error } = await query.order('data', { ascending: false });
 
       if (!error && data) {
-        const activeEventos = (data as Evento[]).filter(ev => !ev.configuracao?.finalizado);
+        const allEvents = data as Evento[];
+        const active = allEvents.filter(ev => !ev.configuracao?.finalizado);
+        const finished = allEvents.filter(ev => ev.configuracao?.finalizado);
+
+        setHistoricoEventos(finished);
         
         // Separar eventos ativos de hoje ou do futuro, e eventos do passado não finalizados
         const startOfToday = dayjs().startOf('day');
@@ -177,7 +184,7 @@ export default function EventosList() {
         const todayOrFutureEvents: Evento[] = [];
         const pastActiveEvents: Evento[] = [];
 
-        activeEventos.forEach((ev) => {
+        active.forEach((ev) => {
           const evDate = dayjs(ev.data);
           if (evDate.isSame(startOfToday, 'day') || evDate.isAfter(startOfToday)) {
             todayOrFutureEvents.push(ev);
@@ -227,26 +234,85 @@ export default function EventosList() {
     }
   };
 
-  const filteredEventos = eventos.filter((evento) =>
+  const currentList = activeTab === 'ativos' ? eventos : historicoEventos;
+  const filteredEventos = currentList.filter((evento) =>
     evento.descricao.toLowerCase().includes(search.toLowerCase()) ||
     evento.local.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div className="px-4 py-3 pb-24 w-full max-w-md mx-auto relative min-h-[calc(100vh-8rem)]">
-      <div className="flex justify-between items-center mb-4 pl-14 h-11">
+      <div className="flex justify-between items-center mb-3 pl-14 h-11 relative">
         <h1 className="text-2xl font-black text-slate-900 leading-none">Eventos</h1>
+        
+        {/* Menu Flutuante no Botão + */}
+        <div className="relative">
+          <button
+            onClick={() => setShowPlusMenu((prev) => !prev)}
+            className="p-2.5 bg-gradient-to-r from-[#eb3237] to-red-650 hover:from-red-500 hover:to-red-600 text-white rounded-xl shadow-lg shadow-[#eb3237]/20 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+            title="Opções"
+          >
+            <Plus size={18} strokeWidth={2.5} className={`transition-transform duration-200 ${showPlusMenu ? 'rotate-45' : ''}`} />
+          </button>
+
+          {showPlusMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowPlusMenu(false)} />
+              <div className="absolute right-0 top-12 z-50 w-44 bg-white rounded-2xl shadow-2xl border border-slate-150 py-1.5 animate-in fade-in zoom-in-95 duration-150 space-y-0.5">
+                <button
+                  onClick={() => {
+                    setShowPlusMenu(false);
+                    navigate(grupoId ? `/eventos/novo?grupo_id=${grupoId}` : '/eventos/novo');
+                  }}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-2.5"
+                >
+                  <Plus size={15} className="text-red-500" />
+                  <span>Criar Evento</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPlusMenu(false);
+                    setActiveTab('historico');
+                  }}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors flex items-center gap-2.5"
+                >
+                  <History size={15} className="text-slate-500" />
+                  <span>Histórico</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs de Seleção: Ativos vs Histórico */}
+      <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
         <button
-          onClick={() => navigate(grupoId ? `/eventos/novo?grupo_id=${grupoId}` : '/eventos/novo')}
-          className="p-2.5 bg-gradient-to-r from-[#eb3237] to-red-650 hover:from-red-500 hover:to-red-600 text-white rounded-xl shadow-lg shadow-[#eb3237]/20 active:scale-95 transition-all cursor-pointer"
-          title="Novo Evento"
+          onClick={() => setActiveTab('ativos')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            activeTab === 'ativos'
+              ? 'bg-white text-red-600 shadow-sm'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
         >
-          <Plus size={18} strokeWidth={2.5} />
+          <Calendar size={13} />
+          <span>Próximos ({eventos.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('historico')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            activeTab === 'historico'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <History size={13} />
+          <span>Histórico ({historicoEventos.length})</span>
         </button>
       </div>
 
       {/* Barra de Pesquisa */}
-      <div className="relative mb-5">
+      <div className="relative mb-4">
         <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
           <Search size={18} />
         </span>
@@ -265,12 +331,22 @@ export default function EventosList() {
         </div>
       ) : filteredEventos.length === 0 ? (
         <div className="text-center py-12 glass rounded-2xl border border-slate-150">
-          <Calendar size={48} className="mx-auto text-slate-600 mb-3" />
-          <p className="text-slate-600 font-medium">Nenhum evento encontrado.</p>
-          <p className="text-slate-600 text-xs mt-1">Crie um novo evento no botão superior direito!</p>
+          {activeTab === 'ativos' ? (
+            <>
+              <Calendar size={48} className="mx-auto text-slate-400 mb-3" />
+              <p className="text-slate-600 font-medium">Nenhum evento próximo encontrado.</p>
+              <p className="text-slate-400 text-xs mt-1">Crie um novo evento no menu do botão superior direito (+)!</p>
+            </>
+          ) : (
+            <>
+              <History size={48} className="mx-auto text-slate-400 mb-3" />
+              <p className="text-slate-600 font-medium">Nenhum evento encerrado no histórico.</p>
+              <p className="text-slate-400 text-xs mt-1">Eventos finalizados aparecerão aqui.</p>
+            </>
+          )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <AnimatePresence>
             {filteredEventos.map((evento, index) => (
               <motion.div
@@ -280,21 +356,32 @@ export default function EventosList() {
                 exit={{ opacity: 0, x: -50 }}
                 transition={{ duration: 0.2, delay: index * 0.05 }}
                 onClick={() => navigate(`/eventos/${evento.id}`)}
-                className="glass p-5 rounded-2xl border border-slate-200 hover:border-violet-600/30 cursor-pointer active:scale-[0.99] transition-all duration-200 flex items-center justify-between group shadow-md hover:shadow-violet-600/5"
+                className={`glass p-4 rounded-2xl border cursor-pointer active:scale-[0.99] transition-all duration-200 flex items-center justify-between group shadow-sm hover:shadow-md ${
+                  evento.configuracao?.finalizado
+                    ? 'border-slate-200 bg-slate-50/50 hover:border-slate-300'
+                    : 'border-slate-200 hover:border-red-500/30'
+                }`}
               >
-                <div className="space-y-2">
-                  <h3 className="font-bold text-slate-900 group-hover:text-red-400 transition-colors text-base">
-                    {evento.descricao}
-                  </h3>
+                <div className="space-y-1.5 flex-1 min-w-0 pr-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-slate-900 group-hover:text-red-500 transition-colors text-sm truncate">
+                      {evento.descricao}
+                    </h3>
+                    {evento.configuracao?.finalizado && (
+                      <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0">
+                        <CheckCircle2 size={10} /> Encerrado
+                      </span>
+                    )}
+                  </div>
                   
-                  <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                    <Calendar size={14} className="text-red-500" />
-                    <span>{dayjs(evento.data).format('DD/MM/YYYY [-] HH:mm')}</span>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <Calendar size={13} className="text-red-500 flex-shrink-0" />
+                    <span className="truncate">{dayjs(evento.data).format('DD/MM/YYYY [-] HH:mm')}</span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                    <MapPin size={14} className="text-cyan-500" />
-                    <span>{evento.local}</span>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <MapPin size={13} className="text-cyan-500 flex-shrink-0" />
+                    <span className="truncate">{evento.local}</span>
                   </div>
                 </div>
 
