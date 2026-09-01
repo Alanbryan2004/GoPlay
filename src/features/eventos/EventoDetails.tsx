@@ -1527,7 +1527,7 @@ export default function EventoDetails() {
       {/* SE EVENTO FINALIZADO: EXIBIR NAVEGADOR DE PARTIDAS E SELETOR 1, 2, 3... */}
       {evento.configuracao?.finalizado ? (
         (() => {
-          const historico: any[] = (evento.configuracao as any)?.historico_partidas || [];
+          const historico: any[] = (config as any)?.historico_partidas || (evento.configuracao as any)?.historico_partidas || [];
           const totalPartidas = historico.length;
           const matchIdx = selectedMatchIndex !== null ? selectedMatchIndex : (totalPartidas > 0 ? totalPartidas - 1 : 0);
           const partidaSelecionada = historico[matchIdx];
