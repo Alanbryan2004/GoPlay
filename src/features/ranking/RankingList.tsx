@@ -22,6 +22,9 @@ export default function RankingList() {
   const [selectedModalidadeId, setSelectedModalidadeId] = useState<string>(
     () => localStorage.getItem('goplay_ranking_selected_modalidade') || ''
   );
+  // Período: 'geral' | 'mensal' | 'semanal'
+  const [selectedPeriodo, setSelectedPeriodo] = useState<'geral' | 'mensal' | 'semanal'>('geral');
+
   // IDs dos grupos que o usuário participa (usado para filtrar ranking geral)
   const [allowedGroupIds, setAllowedGroupIds] = useState<string[]>([]);
 
@@ -41,7 +44,7 @@ export default function RankingList() {
 
   useEffect(() => {
     fetchRanking();
-  }, [selectedGrupoId, selectedModalidadeId, allowedGroupIds]);
+  }, [selectedGrupoId, selectedModalidadeId, selectedPeriodo, allowedGroupIds]);
 
   const initFiltersAndContext = async () => {
     try {
@@ -147,8 +150,8 @@ export default function RankingList() {
       const { data: users, error: userError } = await supabase.from('usuarios').select('*');
       if (userError) throw userError;
 
-      // 2. Obter eventos com base nos filtros selecionados
-      let query = supabase.from('eventos').select('grupo_id, modalidade_id, participantes');
+      // 2. Obter eventos com base nos filtros selecionados (incluindo filtro temporal por Período)
+      let query = supabase.from('eventos').select('grupo_id, modalidade_id, participantes, data, created_at');
       if (selectedGrupoId) {
         // Filtro por grupo específico selecionado
         query = query.eq('grupo_id', selectedGrupoId);
@@ -158,6 +161,22 @@ export default function RankingList() {
       }
       if (selectedModalidadeId) {
         query = query.eq('modalidade_id', selectedModalidadeId);
+      }
+
+      // Aplicar filtro de Período (Semanal / Mensal / Geral)
+      const now = new Date();
+      if (selectedPeriodo === 'semanal') {
+        // Início da semana (Segunda-feira)
+        const day = now.getDay();
+        const diffToMonday = (day === 0 ? -6 : 1) - day;
+        const monday = new Date(now);
+        monday.setDate(now.getDate() + diffToMonday);
+        monday.setHours(0, 0, 0, 0);
+        query = query.gte('data', monday.toISOString().split('T')[0]);
+      } else if (selectedPeriodo === 'mensal') {
+        // Início do mês atual
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        query = query.gte('data', firstDayOfMonth.toISOString().split('T')[0]);
       }
 
       const { data: events, error: eventError } = await query;
@@ -267,14 +286,50 @@ export default function RankingList() {
   return (
     <div className="px-4 py-3 pb-24 w-full max-w-md mx-auto min-h-[calc(100vh-8rem)]">
       {/* Header do Ranking */}
-      <div className="flex items-center gap-3 mb-5 pl-14 h-11">
-        <div className="p-2 bg-yellow-500/10 text-yellow-500 rounded-xl flex items-center justify-center">
-          <Trophy size={18} />
+      <div className="flex items-center justify-between mb-4 pl-14 pr-2 h-11">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-yellow-500/10 text-yellow-500 rounded-xl flex items-center justify-center">
+            <Trophy size={18} />
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 leading-none">Classificação</h1>
         </div>
-        <h1 className="text-2xl font-black text-slate-900 leading-none">Classificação</h1>
       </div>
 
-      {/* Seletor de Filtros */}
+      {/* Tabs de Período (Geral | Mês | Semana) */}
+      <div className="flex items-center justify-center gap-1.5 p-1 bg-slate-100/80 rounded-2xl mb-4 border border-slate-200/60">
+        <button
+          onClick={() => setSelectedPeriodo('geral')}
+          className={`flex-1 py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
+            selectedPeriodo === 'geral'
+              ? 'bg-white text-red-600 shadow-sm'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Geral
+        </button>
+        <button
+          onClick={() => setSelectedPeriodo('mensal')}
+          className={`flex-1 py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
+            selectedPeriodo === 'mensal'
+              ? 'bg-white text-red-600 shadow-sm'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Do Mês 📅
+        </button>
+        <button
+          onClick={() => setSelectedPeriodo('semanal')}
+          className={`flex-1 py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
+            selectedPeriodo === 'semanal'
+              ? 'bg-white text-red-600 shadow-sm'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Da Semana ⚡
+        </button>
+      </div>
+
+      {/* Seletor de Filtros (Grupo e Modalidade) */}
       <div className="grid grid-cols-2 gap-3 mb-6 text-left">
         <div className="space-y-1">
           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Grupo</label>
