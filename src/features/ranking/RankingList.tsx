@@ -96,45 +96,52 @@ export default function RankingList() {
         if (dbModalidades) setModalidades(dbModalidades as Modalidade[]);
       }
 
-      // 4. Se o usuário já tiver uma preferência salva no localStorage, não sobrescrever!
+      // 4. Definir grupo e modalidade padrão
       const savedGrupo = localStorage.getItem('goplay_ranking_selected_grupo');
       const savedModalidade = localStorage.getItem('goplay_ranking_selected_modalidade');
 
-      if (savedGrupo !== null && savedGrupo !== '') {
-        // Já tem preferência salva
-        return;
-      }
+      // Se já houver um grupo válido salvo no localStorage, manter ele
+      if (savedGrupo && userGroupIds.includes(savedGrupo)) {
+        setSelectedGrupoId(savedGrupo);
+      } else {
+        // Tentar encontrar o grupo do último evento que o usuário participou
+        let targetGrupoId = userGroupIds.length > 0 ? userGroupIds[0] : '';
+        let targetModalidadeId = '';
 
-      // Se não tem nada no localStorage, buscar o último evento disputado
-      const { data: events } = await supabase
-        .from('eventos')
-        .select('grupo_id, modalidade_id, participantes')
-        .order('data', { ascending: false })
-        .limit(100);
+        try {
+          const { data: events } = await supabase
+            .from('eventos')
+            .select('grupo_id, modalidade_id, participantes')
+            .order('created_at', { ascending: false })
+            .limit(100);
 
-      if (events) {
-        const lastEvent = events.find((event: any) => {
-          if (Array.isArray(event.participantes)) {
-            return event.participantes.some(
-              (p: any) => p.id === loggedId || p.nome?.trim().toLowerCase() === userData.nome?.trim().toLowerCase()
-            );
-          }
-          return false;
-        });
+          if (events) {
+            const lastEvent = events.find((event: any) => {
+              if (Array.isArray(event.participantes)) {
+                return event.participantes.some(
+                  (p: any) => p.id === loggedId || p.nome?.trim().toLowerCase() === userData.nome?.trim().toLowerCase()
+                );
+              }
+              return false;
+            });
 
-        if (lastEvent) {
-          if (lastEvent.grupo_id) {
-            setSelectedGrupoId(lastEvent.grupo_id);
-            localStorage.setItem('goplay_ranking_selected_grupo', lastEvent.grupo_id);
+            if (lastEvent) {
+              if (lastEvent.grupo_id) targetGrupoId = lastEvent.grupo_id;
+              if (lastEvent.modalidade_id) targetModalidadeId = lastEvent.modalidade_id;
+            }
           }
-          if (lastEvent.modalidade_id && !savedModalidade) {
-            setSelectedModalidadeId(lastEvent.modalidade_id);
-            localStorage.setItem('goplay_ranking_selected_modalidade', lastEvent.modalidade_id);
-          }
-        } else if (userGroupIds.length > 0) {
-          // Se não jogou em nenhum evento ainda, seleciona o primeiro grupo que ele pertence
-          setSelectedGrupoId(userGroupIds[0]);
-          localStorage.setItem('goplay_ranking_selected_grupo', userGroupIds[0]);
+        } catch (err) {
+          console.error('Erro ao buscar último evento:', err);
+        }
+
+        // Se encontrou grupo do último evento ou se tem grupos cadastrados, selecionar como padrão!
+        if (targetGrupoId) {
+          setSelectedGrupoId(targetGrupoId);
+          localStorage.setItem('goplay_ranking_selected_grupo', targetGrupoId);
+        }
+        if (targetModalidadeId && !savedModalidade) {
+          setSelectedModalidadeId(targetModalidadeId);
+          localStorage.setItem('goplay_ranking_selected_modalidade', targetModalidadeId);
         }
       }
     } catch (e) {
