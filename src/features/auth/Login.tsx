@@ -10,15 +10,28 @@ export default function Login() {
     setLoading(true);
     setErro(null);
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
+    // Timeout de segurança: Se o redirecionamento OAuth demorar mais de 10s sem resposta/redirecionamento, liberar botão
+    const loginTimeout = setTimeout(() => {
+      setLoading(false);
+      setErro('O redirecionamento do Google demorou mais que o esperado. Por favor, tente novamente.');
+    }, 10000);
 
-    if (error) {
-      setErro('Erro ao autenticar com o Google: ' + error.message);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+
+      if (error) {
+        clearTimeout(loginTimeout);
+        setErro('Erro ao autenticar com o Google: ' + error.message);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      clearTimeout(loginTimeout);
+      setErro(err.message || 'Erro inesperado ao realizar login.');
       setLoading(false);
     }
   };
