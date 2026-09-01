@@ -21,15 +21,14 @@ export default function RankingList() {
   const [allowedGroupIds, setAllowedGroupIds] = useState<string[]>([]);
 
   useEffect(() => {
-    fetchFilters();
-    fetchCurrentUser();
+    initFiltersAndContext();
   }, []);
 
   useEffect(() => {
     fetchRanking();
   }, [selectedGrupoId, selectedModalidadeId, allowedGroupIds]);
 
-  const fetchFilters = async () => {
+  const initFiltersAndContext = async () => {
     try {
       // 1. Buscar o usuário logado
       const { data: { user } } = await supabase.auth.getUser();
@@ -37,10 +36,11 @@ export default function RankingList() {
 
       const { data: userData } = await supabase
         .from('usuarios')
-        .select('id')
+        .select('id, nome')
         .eq('email', user.email)
         .single();
-      const loggedId = userData?.id || user.id;
+      if (!userData) return;
+      const loggedId = userData.id;
 
       // 2. Buscar apenas os grupos em que o usuário é membro aprovado
       const { data: membroData } = await supabase
@@ -49,13 +49,14 @@ export default function RankingList() {
         .eq('usuario_id', loggedId)
         .eq('status', 'aprovado');
 
+      let userGroupIds: string[] = [];
       if (membroData) {
         const parsedGrupos = membroData
           .map((m: any) => m.grupos)
           .filter(Boolean) as Grupo[];
         setGrupos(parsedGrupos);
-        const ids = parsedGrupos.map((g) => g.id);
-        setAllowedGroupIds(ids);
+        userGroupIds = parsedGrupos.map((g) => g.id);
+        setAllowedGroupIds(userGroupIds);
       }
 
       // 3. Buscar apenas as modalidades em que o usuário possui rating (participação real)
@@ -65,7 +66,6 @@ export default function RankingList() {
         .eq('usuario_id', loggedId);
 
       if (ratingData && ratingData.length > 0) {
-        // Deduplica por id de modalidade
         const modalidadeMap = new Map<string, Modalidade>();
         ratingData.forEach((r: any) => {
           if (r.modalidades) {
@@ -74,48 +74,22 @@ export default function RankingList() {
         });
         setModalidades(Array.from(modalidadeMap.values()));
       } else {
-        // Fallback: carregar todas as modalidades se o usuário não tiver ratings ainda
         const { data: dbModalidades } = await supabase.from('modalidades').select('*');
         if (dbModalidades) setModalidades(dbModalidades as Modalidade[]);
       }
-    } catch (e) {
-      console.error('Erro ao carregar filtros de classificação:', e);
-    }
-  };
 
-  const fetchCurrentUser = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('usuarios')
-          .select('id, nome')
-          .eq('email', user.email)
-          .single();
-        if (profile) {
-          await fetchLastParticipatedContext(profile.nome);
-        }
-      }
-    } catch (e) {
-      console.error('Erro ao buscar usuário logado no ranking:', e);
-    }
-  };
-
-  const fetchLastParticipatedContext = async (userName: string) => {
-    try {
-      // Buscar os últimos 50 eventos disputados ordenados decrescente
-      const { data: events, error } = await supabase
+      // 4. Buscar o último evento em que o usuário participou para definir grupo e modalidade padrão
+      const { data: events } = await supabase
         .from('eventos')
         .select('grupo_id, modalidade_id, participantes')
         .order('data', { ascending: false })
-        .limit(50);
+        .limit(100);
 
-      if (!error && events) {
-        // Achar o primeiro evento em que o usuário participou
+      if (events) {
         const lastEvent = events.find((event: any) => {
           if (Array.isArray(event.participantes)) {
             return event.participantes.some(
-              (p: any) => p.nome?.trim().toLowerCase() === userName.trim().toLowerCase()
+              (p: any) => p.id === loggedId || p.nome?.trim().toLowerCase() === userData.nome?.trim().toLowerCase()
             );
           }
           return false;
@@ -124,10 +98,13 @@ export default function RankingList() {
         if (lastEvent) {
           if (lastEvent.grupo_id) setSelectedGrupoId(lastEvent.grupo_id);
           if (lastEvent.modalidade_id) setSelectedModalidadeId(lastEvent.modalidade_id);
+        } else if (userGroupIds.length > 0) {
+          // Se não jogou em nenhum evento ainda, seleciona o primeiro grupo que ele pertence
+          setSelectedGrupoId(userGroupIds[0]);
         }
       }
     } catch (e) {
-      console.error('Erro ao carregar último contexto de participação:', e);
+      console.error('Erro ao inicializar filtros do ranking:', e);
     }
   };
 
