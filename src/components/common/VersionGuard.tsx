@@ -33,13 +33,13 @@ export default function VersionGuard() {
       }
     }
 
-    // Primeira verificação: salva a versão que o usuário está rodando agora
+    // 1. Checagem inicial
     fetchVersion().then((v) => {
       if (v) currentVersion.current = v;
     });
 
-    // Verificação periódica a cada 60 segundos
-    intervalRef.current = setInterval(async () => {
+    // Função para verificar se a versão mudou
+    const checkVersion = async () => {
       const latest = await fetchVersion();
       if (!latest || !currentVersion.current) return;
 
@@ -49,15 +49,29 @@ export default function VersionGuard() {
         );
         setShowBanner(true);
 
-        // Aguarda 3 segundos para o usuário ver o aviso, depois recarrega
+        // Aguarda 2.5 segundos para o usuário ver o aviso e força reload sem cache
         setTimeout(() => {
           window.location.reload();
-        }, 3000);
+        }, 2500);
       }
-    }, 60 * 1000); // Verifica a cada 1 minuto
+    };
+
+    // 2. Verificação periódica a cada 15 segundos
+    intervalRef.current = setInterval(checkVersion, 15 * 1000);
+
+    // 3. Verificação instantânea quando a aba ou app no celular volta a ficar visível/focado
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkVersion();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', checkVersion);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', checkVersion);
     };
   }, []);
 
