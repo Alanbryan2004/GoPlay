@@ -409,9 +409,9 @@ export default function EventoDetails() {
         setVitoriasTime2(data.vitorias_time2 || 0);
         if (data.configuracao) setConfig(data.configuracao);
 
-        // Se o evento estiver finalizado OU se a URL contiver ?show_result=true, abrir automaticamente o Pódio (Resultado)
+        // Só abrir o modal do Pódio automaticamente se a URL contiver explicitamente ?show_result=true (ex: ao clicar na notificação)
         const searchParams = new URLSearchParams(window.location.search);
-        if (data.configuracao?.finalizado || searchParams.get('show_result') === 'true') {
+        if (searchParams.get('show_result') === 'true') {
           setPodiumStep(1);
           setShowPodium(true);
         }
@@ -1534,14 +1534,23 @@ export default function EventoDetails() {
 
           return (
             <div className="glass p-5 rounded-2xl border border-slate-200 shadow-xl space-y-4 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <h2 className="font-black text-xs uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-                  <History size={14} className="text-red-500" />
-                  Histórico de Partidas ({totalPartidas})
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-black text-xs uppercase tracking-widest text-slate-500 flex items-center gap-1.5 min-w-0">
+                  <History size={14} className="text-red-500 shrink-0" />
+                  <span className="truncate">Histórico de Partidas ({totalPartidas})</span>
                 </h2>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                  Evento Encerrado
-                </span>
+                
+                <button
+                  onClick={() => {
+                    setPodiumStep(1);
+                    setShowPodium(true);
+                  }}
+                  className="px-2.5 py-1 bg-yellow-50 hover:bg-yellow-100 border border-yellow-300 text-yellow-800 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
+                  title="Ver Resultado e Ranking do Evento"
+                >
+                  <Trophy size={11} className="text-yellow-600" />
+                  <span>Ver Pódio</span>
+                </button>
               </div>
 
               {totalPartidas > 0 ? (
