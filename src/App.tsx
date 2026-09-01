@@ -24,6 +24,9 @@ import AmigosList from './features/amigos/AmigosList';
 import Home from './features/home/Home';
 import ComunidadesList from './features/comunidades/ComunidadesList';
 import ComunidadeDetails from './features/comunidades/ComunidadeDetails';
+import TorneiosList from './features/torneios/TorneiosList';
+import NovoTorneio from './features/torneios/NovoTorneio';
+import TorneioDetails from './features/torneios/TorneioDetails';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,6 +83,11 @@ function AppContent() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/comunidades" element={<ComunidadesList />} />
           <Route path="/comunidades/:id" element={<ComunidadeDetails />} />
+
+          {/* Rotas de Torneios */}
+          <Route path="/torneios" element={<TorneiosList />} />
+          <Route path="/torneios/novo" element={<NovoTorneio />} />
+          <Route path="/torneios/:id" element={<TorneioDetails />} />
           
           {/* Rota Fallback */}
           <Route path="*" element={<Navigate to={user ? "/" : "/login"} replace />} />

@@ -7,7 +7,7 @@ export default function BottomNavigation() {
 
   const navItems = [
     { label: 'Home', path: '/', icon: HomeIcon, exact: true },
-    { label: 'Jogo', path: '/eventos', icon: PlayCircle },
+    { label: 'Torneio', path: '/torneios', icon: Trophy },
     { label: 'Sorteio', path: '/sorteio', icon: Sparkles },
     { label: 'Ranking', path: '/ranking', icon: Trophy },
   ];

@@ -12,7 +12,7 @@ export default function Home() {
     { label: 'Amigos', icon: UserPlus, path: '/amigos', color: 'text-violet-500 bg-violet-50' },
     { label: 'Placar', icon: ToggleRight, path: '/eventos', color: 'text-cyan-500 bg-cyan-50' },
     { label: 'Sorteio', icon: Sparkles, path: '/sorteio', color: 'text-pink-500 bg-pink-50' },
-    { label: 'Jogo', icon: PlayCircle, path: '/eventos', color: 'text-indigo-500 bg-indigo-50' },
+    { label: 'Torneio', icon: Trophy, path: '/torneios', color: 'text-amber-600 bg-amber-100/60' },
   ];
 
   return (

@@ -1,0 +1,377 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
+import type { Torneio, TorneioConfronto } from '../../types/torneio';
+import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import dayjs from 'dayjs';
+
+export default function TorneioDetails() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  const [torneio, setTorneio] = useState<Torneio | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [sorteando, setSorteando] = useState(false);
+  const [showDrawAnimation, setShowDrawAnimation] = useState(false);
+  const [editDateModal, setEditDateModal] = useState(false);
+  
+  // Edição de data/hora
+  const [editInicio, setEditInicio] = useState('');
+  const [editFim, setEditFim] = useState('');
+
+  useEffect(() => {
+    fetchTorneio();
+  }, [id]);
+
+  const fetchTorneio = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('torneios')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (!error && data) {
+        setTorneio(data as Torneio);
+        setEditInicio(data.data_inicio || '');
+        setEditFim(data.data_fim || '');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Algoritmo de Sorteio de Chaveamento / Pontos Corridos
+  const handleSortearChaveamento = async () => {
+    if (!torneio) return;
+    setSorteando(true);
+    setShowDrawAnimation(true);
+
+    // Embaralha a ordem dos times aleatoriamente
+    const timesEmbaralhados = [...torneio.times].sort(() => Math.random() - 0.5);
+
+    const novosConfrontos: TorneioConfronto[] = [];
+
+    if (torneio.formato === 'chaveamento') {
+      // Criação de chaves mata-mata (Quartas / Semifinais / Final dependendo da quantidade de times)
+      const numTimes = timesEmbaralhados.length;
+      let faseNome = 'Quartas de Final';
+      if (numTimes <= 4) faseNome = 'Semifinal';
+      if (numTimes <= 2) faseNome = 'Final';
+
+      for (let i = 0; i < numTimes; i += 2) {
+        const timeA = timesEmbaralhados[i];
+        const timeB = timesEmbaralhados[i + 1] || { id: 'bye', nome: 'Aguardando' };
+        novosConfrontos.push({
+          id: `match_${i / 2}_${Date.now()}`,
+          fase: faseNome,
+          rodada: 1,
+          timeA,
+          timeB,
+          placarA: 0,
+          placarB: 0,
+        });
+      }
+    } else {
+      // Pontos corridos: todos jogam contra todos em rodadas
+      const n = timesEmbaralhados.length;
+      let matchCounter = 1;
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          novosConfrontos.push({
+            id: `match_pc_${matchCounter}_${Date.now()}`,
+            fase: `Rodada ${Math.ceil(matchCounter / Math.floor(n / 2))}`,
+            rodada: matchCounter,
+            timeA: timesEmbaralhados[i],
+            timeB: timesEmbaralhados[j],
+            placarA: 0,
+            placarB: 0,
+          });
+          matchCounter++;
+        }
+      }
+    }
+
+    // Simula a animação do sorteio por 2.5 segundos
+    setTimeout(async () => {
+      try {
+        const updates = {
+          chaveamento: novosConfrontos,
+          status: 'sorteado' as const,
+        };
+
+        await supabase.from('torneios').update(updates).eq('id', torneio.id);
+        setTorneio((prev) => (prev ? ({ ...prev, ...updates } as Torneio) : null));
+      } catch (e) {
+        console.error('Erro ao salvar sorteio:', e);
+      } finally {
+        setSorteando(false);
+        setShowDrawAnimation(false);
+      }
+    }, 2500);
+  };
+
+  const handleSalvarDatas = async () => {
+    if (!torneio) return;
+    try {
+      const updates = {
+        data_inicio: editInicio,
+        data_fim: editFim || undefined,
+      };
+      await supabase.from('torneios').update(updates).eq('id', torneio.id);
+      setTorneio((prev) => (prev ? ({ ...prev, ...updates } as Torneio) : null));
+      setEditDateModal(false);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAtualizarPlacar = async (matchId: string, pA: number, pB: number) => {
+    if (!torneio) return;
+    const novosConfrontos = torneio.chaveamento.map((c) => {
+      if (c.id === matchId) {
+        let vencedorId: string | undefined = undefined;
+        if (pA > pB) vencedorId = c.timeA.id;
+        if (pB > pA) vencedorId = c.timeB.id;
+        return { ...c, placarA: pA, placarB: pB, vencedorId };
+      }
+      return c;
+    });
+
+    setTorneio({ ...torneio, chaveamento: novosConfrontos });
+    await supabase.from('torneios').update({ chaveamento: novosConfrontos }).eq('id', torneio.id);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-[calc(100vh-8rem)]">
+        <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!torneio) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-slate-600">Torneio não encontrado.</p>
+        <button onClick={() => navigate('/torneios')} className="mt-4 text-red-500 font-bold underline">
+          Voltar para Torneios
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-3 pb-24 w-full max-w-md mx-auto min-h-[calc(100vh-8rem)] space-y-5 relative">
+      {/* Overlay de Animação Magnífica do Sorteio */}
+      <AnimatePresence>
+        {showDrawAnimation && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[999] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-white text-center space-y-6"
+          >
+            <motion.div
+              animate={{ rotate: 360, scale: [1, 1.2, 1] }}
+              transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
+              className="w-24 h-24 rounded-full bg-gradient-to-tr from-amber-500 to-red-600 p-1 flex items-center justify-center shadow-2xl shadow-amber-500/30"
+            >
+              <div className="w-full h-full bg-slate-900 rounded-full flex items-center justify-center">
+                <Shuffle size={40} className="text-amber-400" />
+              </div>
+            </motion.div>
+
+            <div className="space-y-2">
+              <h2 className="text-2xl font-black tracking-tight">Sorteando Chaveamento...</h2>
+              <p className="text-xs text-slate-400">Embaralhando os times e definindo os confrontos da 1ª Rodada!</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/torneios')}
+            className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className="text-xl font-black text-slate-900 leading-tight">{torneio.nome}</h1>
+            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+              {torneio.formato === 'chaveamento' ? 'Chaveamento Eliminatório' : 'Pontos Corridos'}
+            </span>
+          </div>
+        </div>
+
+        {/* Botão de Sortear Chaveamento */}
+        <button
+          onClick={handleSortearChaveamento}
+          disabled={sorteando}
+          className="p-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 text-xs font-black cursor-pointer"
+          title="Realizar Sorteio do Chaveamento"
+        >
+          <Shuffle size={14} />
+          <span>Sortear</span>
+        </button>
+      </div>
+
+      {/* Card de Informações e Datas */}
+      <div className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs text-slate-600">
+            <Calendar size={14} className="text-red-500" />
+            <span className="font-bold">
+              {dayjs(torneio.data_inicio).format('DD/MM/YYYY')}
+              {torneio.data_fim ? ` até ${dayjs(torneio.data_fim).format('DD/MM/YYYY')}` : ''}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setEditDateModal(true)}
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
+            title="Alterar Datas"
+          >
+            <Edit3 size={14} />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4 text-xs font-semibold text-slate-600 pt-1 border-t border-slate-100">
+          <span>👥 {torneio.quantidade_times} Times</span>
+          <span>🎲 {torneio.tipo_times === 'sorteio' ? 'Por Sorteio' : 'Fechados'}</span>
+          <span>{torneio.publico ? '🌐 Público' : '🔒 Privado'}</span>
+        </div>
+      </div>
+
+      {/* Visualização das Chaves / Confrontos */}
+      {torneio.chaveamento.length === 0 ? (
+        <div className="text-center py-10 glass rounded-2xl border border-slate-200 p-6 space-y-4">
+          <Shuffle size={36} className="mx-auto text-amber-500" />
+          <div>
+            <h3 className="font-black text-slate-800 text-sm">Chaveamento ainda não realizado</h3>
+            <p className="text-xs text-slate-500 mt-1">Clique no botão "Sortear" acima a qualquer momento para gerar as chaves do torneio!</p>
+          </div>
+          <button
+            onClick={handleSortearChaveamento}
+            className="w-full py-3 bg-amber-500 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+          >
+            <Shuffle size={14} />
+            <span>Sortear Chaveamento Agora</span>
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <h2 className="font-black text-xs uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+            <GitMerge size={14} className="text-amber-500" />
+            Confrontos do Torneio
+          </h2>
+
+          <div className="space-y-3">
+            {torneio.chaveamento.map((match) => (
+              <div
+                key={match.id}
+                className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3"
+              >
+                <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
+                  <span>{match.fase}</span>
+                  <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Partida Ativa</span>
+                </div>
+
+                <div className="grid grid-cols-5 items-center gap-2">
+                  {/* Time A */}
+                  <div className={`col-span-2 p-2.5 rounded-xl border text-center font-bold text-xs ${match.vencedorId === match.timeA.id ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black' : 'bg-slate-50 border-slate-200 text-slate-800'}`}>
+                    <span className="block truncate">{match.timeA.nome}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={match.placarA || 0}
+                      onChange={(e) => handleAtualizarPlacar(match.id, parseInt(e.target.value) || 0, match.placarB || 0)}
+                      className="w-12 text-center mt-1 bg-white border border-slate-300 rounded-lg py-0.5 font-black text-sm"
+                    />
+                  </div>
+
+                  <div className="col-span-1 text-center font-black text-slate-400 text-sm">
+                    X
+                  </div>
+
+                  {/* Time B */}
+                  <div className={`col-span-2 p-2.5 rounded-xl border text-center font-bold text-xs ${match.vencedorId === match.timeB.id ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black' : 'bg-slate-50 border-slate-200 text-slate-800'}`}>
+                    <span className="block truncate">{match.timeB.nome}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={match.placarB || 0}
+                      onChange={(e) => handleAtualizarPlacar(match.id, match.placarA || 0, parseInt(e.target.value) || 0)}
+                      className="w-12 text-center mt-1 bg-white border border-slate-300 rounded-lg py-0.5 font-black text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição de Datas */}
+      <AnimatePresence>
+        {editDateModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <div className="bg-white p-5 rounded-2xl w-full max-w-xs space-y-4 shadow-2xl">
+              <h3 className="font-black text-slate-900 text-base">Alterar Datas do Torneio</h3>
+
+              <div className="space-y-3 text-left">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase">Data Início</label>
+                  <input
+                    type="date"
+                    value={editInicio}
+                    onChange={(e) => setEditInicio(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase">Data Término</label>
+                  <input
+                    type="date"
+                    value={editFim}
+                    onChange={(e) => setEditFim(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setEditDateModal(false)}
+                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSalvarDatas}
+                  className="flex-1 py-2.5 bg-amber-500 text-white font-bold rounded-xl text-xs cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <Save size={14} />
+                  <span>Salvar</span>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

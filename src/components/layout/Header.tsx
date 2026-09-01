@@ -324,6 +324,7 @@ export default function Header() {
     { to: '/', icon: HomeIcon, label: 'Home', badge: 0 },
     { to: '/amigos', icon: UserPlus, label: 'Amigos', badge: notifs.friendRequests },
     { to: '/eventos', icon: Calendar, label: 'Eventos', badge: notifs.newEvents, onClickExtra: markEventsSeen },
+    { to: '/torneios', icon: Trophy, label: 'Torneios', badge: 0 },
     { to: '/grupos', icon: Users, label: 'Grupos', badge: notifs.groupRequests },
     { to: '/comunidades', icon: Network, label: 'Comunidades', badge: 0 },
     { to: '/ranking', icon: Trophy, label: 'Ranking', badge: notifs.rankingChange ? 1 : 0, onClickExtra: markRankingSeen },
