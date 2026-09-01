@@ -1,7 +1,19 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { User, LogOut, Menu, Users, Calendar, X, Home as HomeIcon } from 'lucide-react';
+import {
+  User, LogOut, Menu, Users, Calendar, X, Home as HomeIcon,
+  UserPlus, Trophy, Network, Bell
+} from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+
+interface NotificationCounts {
+  friendRequests: number;    // Solicitações de amizade pendentes
+  newEvents: number;         // Novos eventos criados desde a última visita
+  groupRequests: number;     // Solicitações de entrada em grupo pendentes
+  rankingChange: boolean;    // Houve mudança de posição no ranking recentemente
+}
+
+const LAST_SEEN_EVENTS_KEY = 'goplay_last_seen_events';
 
 export default function Header() {
   const navigate = useNavigate();
@@ -11,35 +23,192 @@ export default function Header() {
   const [userModalidades, setUserModalidades] = useState<string>('');
   const [userRating, setUserRating] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+
+  // Notificações
+  const [notifs, setNotifs] = useState<NotificationCounts>({
+    friendRequests: 0,
+    newEvents: 0,
+    groupRequests: 0,
+    rankingChange: false,
+  });
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+
+  const totalNotifs =
+    notifs.friendRequests + notifs.newEvents + notifs.groupRequests + (notifs.rankingChange ? 1 : 0);
 
   useEffect(() => {
     async function getProfile() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Query profile from database
         const { data, error } = await supabase
           .from('usuarios')
-          .select('nome, foto')
+          .select('id, nome, foto')
           .eq('email', user.email)
           .single();
 
         if (data && !error) {
           setUserName(data.nome);
           setUserAvatar(data.foto || '');
-          await fetchUserStats(data.nome);
+          setCurrentUserId(data.id);
+          await fetchUserStats(data.nome, data.id);
+          fetchNotifications(data.id);
         } else {
           const name = user.user_metadata?.nome || user.email?.split('@')[0] || 'Jogador';
           setUserName(name);
-          await fetchUserStats(name);
+          await fetchUserStats(name, '');
         }
       }
     }
     getProfile();
   }, [location.pathname]);
 
-  const fetchUserStats = async (name: string) => {
+  // Re-fetch notificações ao fechar o drawer (usuário pode ter visitado as telas)
+  useEffect(() => {
+    if (!drawerOpen && currentUserId) {
+      fetchNotifications(currentUserId);
+    }
+  }, [drawerOpen]);
+
+  const fetchNotifications = useCallback(async (userId: string) => {
+    if (!userId) return;
     try {
-      // 1. Obter o ID do usuário logado
+      // 1. Solicitações de amizade pendentes (pedidos que outros fizeram para mim)
+      const { count: friendCount } = await supabase
+        .from('amigos')
+        .select('id', { count: 'exact', head: true })
+        .eq('amigo_id', userId)
+        .eq('ativo', false);
+
+      // 2. Novos eventos criados desde a última visita do usuário
+      const lastSeenStr = localStorage.getItem(LAST_SEEN_EVENTS_KEY);
+      const lastSeen = lastSeenStr ? new Date(lastSeenStr).toISOString() : null;
+
+      let newEventsCount = 0;
+      if (lastSeen) {
+        // Buscar grupos do usuário para filtrar eventos relevantes
+        const { data: myMemberships } = await supabase
+          .from('membros_grupo')
+          .select('grupo_id')
+          .eq('usuario_id', userId)
+          .eq('status', 'aprovado');
+
+        const myGrupoIds = (myMemberships || []).map((m: any) => m.grupo_id);
+
+        if (myGrupoIds.length > 0) {
+          const { count: evCount } = await supabase
+            .from('eventos')
+            .select('id', { count: 'exact', head: true })
+            .in('grupo_id', myGrupoIds)
+            .neq('usuario_id', userId) // Não contar eventos que EU criei
+            .gt('created_at', lastSeen);
+
+          newEventsCount = evCount || 0;
+        }
+      } else {
+        // Primeira vez: marcar agora como "visto"
+        localStorage.setItem(LAST_SEEN_EVENTS_KEY, new Date().toISOString());
+      }
+
+      // 3. Solicitações de entrada em grupos que eu administro
+      const { data: myAdminGroups } = await supabase
+        .from('membros_grupo')
+        .select('grupo_id')
+        .eq('usuario_id', userId)
+        .eq('tipo_perfil', 'A')
+        .eq('status', 'aprovado');
+
+      let groupRequestsCount = 0;
+      if (myAdminGroups && myAdminGroups.length > 0) {
+        const adminGrupoIds = myAdminGroups.map((g: any) => g.grupo_id);
+        const { count: grpCount } = await supabase
+          .from('membros_grupo')
+          .select('id', { count: 'exact', head: true })
+          .in('grupo_id', adminGrupoIds)
+          .eq('status', 'pendente');
+        groupRequestsCount = grpCount || 0;
+      }
+
+      // 4. Mudança de ranking: comparar posição atual vs. última salva
+      let rankingChanged = false;
+      const lastRankKey = `goplay_last_rank_${userId}`;
+      const lastRankStr = localStorage.getItem(lastRankKey);
+
+      if (lastRankStr) {
+        const lastRank = parseInt(lastRankStr, 10);
+        // Buscar posição atual no maior grupo do usuário
+        const { data: myMbs } = await supabase
+          .from('membros_grupo')
+          .select('grupo_id')
+          .eq('usuario_id', userId)
+          .eq('status', 'aprovado')
+          .limit(1);
+
+        if (myMbs && myMbs.length > 0) {
+          const gid = myMbs[0].grupo_id;
+          const { data: rankings } = await supabase
+            .from('ratings_jogador')
+            .select('usuario_id, rating')
+            .eq('grupo_id', gid)
+            .order('rating', { ascending: false });
+
+          if (rankings) {
+            const currentPos = rankings.findIndex((r: any) => r.usuario_id === userId) + 1;
+            if (currentPos > 0 && currentPos !== lastRank) {
+              rankingChanged = true;
+              localStorage.setItem(lastRankKey, String(currentPos));
+            }
+          }
+        }
+      } else {
+        // Salvar posição inicial para próxima comparação
+        const { data: myMbs } = await supabase
+          .from('membros_grupo')
+          .select('grupo_id')
+          .eq('usuario_id', userId)
+          .eq('status', 'aprovado')
+          .limit(1);
+
+        if (myMbs && myMbs.length > 0) {
+          const gid = myMbs[0].grupo_id;
+          const { data: rankings } = await supabase
+            .from('ratings_jogador')
+            .select('usuario_id')
+            .eq('grupo_id', gid)
+            .order('rating', { ascending: false });
+
+          if (rankings) {
+            const pos = rankings.findIndex((r: any) => r.usuario_id === userId) + 1;
+            if (pos > 0) localStorage.setItem(lastRankKey, String(pos));
+          }
+        }
+      }
+
+      setNotifs({
+        friendRequests: friendCount || 0,
+        newEvents: newEventsCount,
+        groupRequests: groupRequestsCount,
+        rankingChange: rankingChanged,
+      });
+    } catch (e) {
+      console.error('Erro ao buscar notificações:', e);
+    }
+  }, []);
+
+  const markEventsSeen = () => {
+    localStorage.setItem(LAST_SEEN_EVENTS_KEY, new Date().toISOString());
+    setNotifs(prev => ({ ...prev, newEvents: 0 }));
+  };
+
+  const markRankingSeen = () => {
+    if (currentUserId) {
+      localStorage.removeItem(`goplay_last_rank_${currentUserId}`);
+    }
+    setNotifs(prev => ({ ...prev, rankingChange: false }));
+  };
+
+  const fetchUserStats = async (name: string, uid: string) => {
+    try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -48,44 +217,30 @@ export default function Header() {
         .select('id')
         .eq('email', user.email)
         .single();
-      
+
       if (!userData) return;
 
-      // 2. Buscar os ratings desse jogador em todos os grupos/modalidades
       const { data: dbRatings } = await supabase
         .from('ratings_jogador')
         .select('rating, modalidade_id, modalidades:modalidade_id ( nome )')
         .eq('usuario_id', userData.id);
 
-      // 3. Buscar os eventos (para retrocompatibilidade/fallback de modalidades)
       const { data: events } = await supabase
         .from('eventos')
-        .select(`
-          participantes,
-          modalidades:modalidade_id (
-            nome
-          )
-        `);
+        .select('participantes, modalidades:modalidade_id ( nome )');
 
       const sports = new Set<string>();
       let totalRatingSum = 0;
       let ratingCount = 0;
 
-      // Adicionar as modalidades e ratings do ratings_jogador
       if (dbRatings && dbRatings.length > 0) {
         dbRatings.forEach((r: any) => {
-          if (r.rating !== null) {
-            totalRatingSum += Number(r.rating);
-            ratingCount++;
-          }
+          if (r.rating !== null) { totalRatingSum += Number(r.rating); ratingCount++; }
           const sportName = r.modalidades?.nome;
-          if (sportName) {
-            sports.add(sportName);
-          }
+          if (sportName) sports.add(sportName);
         });
       }
 
-      // Buscar também modalidades de eventos antigos em que ele participou (para retrocompatibilidade)
       if (events) {
         events.forEach((event: any) => {
           if (Array.isArray(event.participantes)) {
@@ -94,26 +249,17 @@ export default function Header() {
             );
             if (p) {
               const sportName = event.modalidades?.nome;
-              if (sportName) {
-                sports.add(sportName);
-              }
-              // Se ratings_jogador estava vazio, vamos preencher usando os eventos
+              if (sportName) sports.add(sportName);
               if (!dbRatings || dbRatings.length === 0) {
-                if (typeof p.avaliacao === 'number') {
-                  totalRatingSum += p.avaliacao;
-                  ratingCount++;
-                }
+                if (typeof p.avaliacao === 'number') { totalRatingSum += p.avaliacao; ratingCount++; }
               }
             }
           }
         });
       }
 
-      const avg = ratingCount > 0 ? totalRatingSum / ratingCount : null;
-      setUserRating(avg);
-
-      const sportsList = Array.from(sports).join(', ');
-      setUserModalidades(sportsList);
+      setUserRating(ratingCount > 0 ? totalRatingSum / ratingCount : null);
+      setUserModalidades(Array.from(sports).join(', '));
     } catch (e) {
       console.error('Erro ao buscar estatísticas do jogador no header:', e);
     }
@@ -124,28 +270,39 @@ export default function Header() {
     navigate('/login');
   };
 
-  // Exibir a Sidebar apenas nas rotas principais do menu
-  const showSidebar = 
+  const showSidebar =
     location.pathname === '/' ||
     location.pathname === '/eventos' ||
     location.pathname === '/grupos' ||
     location.pathname === '/ranking' ||
-    location.pathname === '/amigos';
+    location.pathname === '/amigos' ||
+    location.pathname === '/comunidades';
 
   if (!showSidebar) return null;
 
+  // ─── Nav items com contadores de notificação ───────────────────────────
+  const navItems = [
+    { to: '/', icon: HomeIcon, label: 'Home', badge: 0 },
+    { to: '/amigos', icon: UserPlus, label: 'Amigos', badge: notifs.friendRequests },
+    { to: '/eventos', icon: Calendar, label: 'Eventos', badge: notifs.newEvents, onClickExtra: markEventsSeen },
+    { to: '/grupos', icon: Users, label: 'Grupos', badge: notifs.groupRequests },
+    { to: '/comunidades', icon: Network, label: 'Comunidades', badge: 0 },
+    { to: '/ranking', icon: Trophy, label: 'Ranking', badge: notifs.rankingChange ? 1 : 0, onClickExtra: markRankingSeen },
+    { to: '/profile', icon: User, label: 'Meu Perfil', badge: 0 },
+  ];
+
   return (
     <>
-      {/* Container principal do Drawer (Sidebar) */}
-      <div 
+      {/* Drawer Container */}
+      <div
         className={`fixed top-0 bottom-16 left-0 z-50 flex transition-transform duration-300 ease-out transform ${
           drawerOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Drawer Panel */}
         <div className="relative flex flex-col w-64 max-w-xs bg-white h-full shadow-2xl border-r border-slate-100 rounded-br-2xl">
-          
-          {/* Botão de Toggle Alça/Flutuante - só fica visível quando o drawer está FECHADO */}
+
+          {/* Toggle Button — visível só com drawer fechado */}
           {!drawerOpen && (
             <button
               onClick={() => setDrawerOpen(true)}
@@ -153,23 +310,23 @@ export default function Header() {
               title="Abrir Menu"
             >
               <Menu size={20} />
+              {/* Badge de notificação no botão do menu */}
+              {totalNotifs > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-amber-400 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 shadow-md animate-bounce">
+                  {totalNotifs > 9 ? '9+' : totalNotifs}
+                </span>
+              )}
             </button>
           )}
 
-          {/* Header da Sidebar: Logo + Dados do Usuário */}
+          {/* Header: Logo + Perfil + Sino */}
           <div className="p-4 border-b border-slate-150 flex items-center gap-3 bg-slate-50">
-            {/* Logo do App */}
             <img src="/goplay.png" alt="GoPlay Logo" className="h-10 w-auto object-contain rounded-xl flex-shrink-0" />
-            
-            {/* Divisor vertical sutil */}
             <div className="h-8 w-[1px] bg-slate-200 flex-shrink-0" />
 
-            {/* Dados do Usuário */}
+            {/* Avatar + Nome */}
             <button
-              onClick={() => {
-                setDrawerOpen(false);
-                navigate('/profile');
-              }}
+              onClick={() => { setDrawerOpen(false); navigate('/profile'); }}
               className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-80 active:scale-95 transition-all cursor-pointer focus:outline-none"
               title="Meu Perfil"
             >
@@ -197,59 +354,156 @@ export default function Header() {
                 </div>
               </div>
             </button>
+
+            {/* Sino de Notificações */}
+            <button
+              onClick={() => setShowNotifPanel(p => !p)}
+              className="relative p-1.5 rounded-xl hover:bg-slate-100 text-slate-500 transition-all flex-shrink-0"
+              title="Notificações"
+            >
+              <Bell size={16} className={totalNotifs > 0 ? 'text-amber-500' : 'text-slate-400'} />
+              {totalNotifs > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] bg-[#eb3237] text-white text-[8px] font-black rounded-full flex items-center justify-center px-0.5 shadow-sm">
+                  {totalNotifs > 9 ? '9+' : totalNotifs}
+                </span>
+              )}
+            </button>
           </div>
+
+          {/* Painel de Notificações (expansível dentro do drawer) */}
+          {showNotifPanel && (
+            <div className="border-b border-slate-100 bg-amber-50/60 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                  <Bell size={10} className="text-amber-400" /> Notificações
+                </span>
+                <button onClick={() => setShowNotifPanel(false)} className="p-0.5 rounded text-slate-400 hover:text-slate-700">
+                  <X size={12} />
+                </button>
+              </div>
+
+              {totalNotifs === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-1">Tudo em dia! ✓</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {notifs.friendRequests > 0 && (
+                    <button
+                      onClick={() => { setShowNotifPanel(false); setDrawerOpen(false); navigate('/amigos'); }}
+                      className="w-full flex items-center gap-2.5 p-2 bg-white rounded-xl border border-amber-200 hover:border-amber-400 transition-all text-left"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                        <UserPlus size={13} className="text-violet-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-slate-700">Solicitação de Amizade</p>
+                        <p className="text-[10px] text-slate-500">{notifs.friendRequests} pedido{notifs.friendRequests > 1 ? 's' : ''} pendente{notifs.friendRequests > 1 ? 's' : ''}</p>
+                      </div>
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500 text-white text-[9px] font-black flex items-center justify-center">
+                        {notifs.friendRequests}
+                      </span>
+                    </button>
+                  )}
+
+                  {notifs.newEvents > 0 && (
+                    <button
+                      onClick={() => { setShowNotifPanel(false); setDrawerOpen(false); markEventsSeen(); navigate('/eventos'); }}
+                      className="w-full flex items-center gap-2.5 p-2 bg-white rounded-xl border border-amber-200 hover:border-amber-400 transition-all text-left"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+                        <Calendar size={13} className="text-red-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-slate-700">Novos Eventos</p>
+                        <p className="text-[10px] text-slate-500">{notifs.newEvents} evento{notifs.newEvents > 1 ? 's' : ''} novo{notifs.newEvents > 1 ? 's' : ''} no seu grupo</p>
+                      </div>
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">
+                        {notifs.newEvents}
+                      </span>
+                    </button>
+                  )}
+
+                  {notifs.groupRequests > 0 && (
+                    <button
+                      onClick={() => { setShowNotifPanel(false); setDrawerOpen(false); navigate('/grupos'); }}
+                      className="w-full flex items-center gap-2.5 p-2 bg-white rounded-xl border border-amber-200 hover:border-amber-400 transition-all text-left"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                        <Users size={13} className="text-blue-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-slate-700">Solicitação de Grupo</p>
+                        <p className="text-[10px] text-slate-500">{notifs.groupRequests} pedido{notifs.groupRequests > 1 ? 's' : ''} de acesso</p>
+                      </div>
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">
+                        {notifs.groupRequests}
+                      </span>
+                    </button>
+                  )}
+
+                  {notifs.rankingChange && (
+                    <button
+                      onClick={() => { setShowNotifPanel(false); setDrawerOpen(false); markRankingSeen(); navigate('/ranking'); }}
+                      className="w-full flex items-center gap-2.5 p-2 bg-white rounded-xl border border-amber-200 hover:border-amber-400 transition-all text-left"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                        <Trophy size={13} className="text-amber-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-slate-700">Ranking Atualizado</p>
+                        <p className="text-[10px] text-slate-500">Sua posição no grupo mudou!</p>
+                      </div>
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-400 text-white text-[9px] font-black flex items-center justify-center">!</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Navigation links */}
-          <div className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-            <Link 
-              to="/" 
-              onClick={() => setDrawerOpen(false)}
-              className="flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-slate-50 rounded-xl font-medium transition-colors"
-            >
-              <HomeIcon size={18} className="text-slate-500" />
-              <span>Home</span>
-            </Link>
-            <Link 
-              to="/eventos" 
-              onClick={() => setDrawerOpen(false)}
-              className="flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-slate-50 rounded-xl font-medium transition-colors"
-            >
-              <Calendar size={18} className="text-slate-500" />
-              <span>Eventos</span>
-            </Link>
-            <Link 
-              to="/grupos" 
-              onClick={() => setDrawerOpen(false)}
-              className="flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-slate-50 rounded-xl font-medium transition-colors"
-            >
-              <Users size={18} className="text-slate-500" />
-              <span>Grupos</span>
-            </Link>
-            <Link 
-              to="/grupos" 
-              onClick={() => setDrawerOpen(false)}
-              className="flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-slate-50 rounded-xl font-medium transition-colors"
-            >
-              <Users size={18} className="text-slate-500" />
-              <span>Comunidades</span>
-            </Link>
-            <Link 
-              to="/profile" 
-              onClick={() => setDrawerOpen(false)}
-              className="flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-slate-50 rounded-xl font-medium transition-colors"
-            >
-              <User size={18} className="text-slate-500" />
-              <span>Meu Perfil</span>
-            </Link>
+          <div className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
+            {navItems.map(({ to, icon: Icon, label, badge, onClickExtra }) => {
+              const isActive = to === '/'
+                ? location.pathname === '/'
+                : location.pathname.startsWith(to);
+
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    setShowNotifPanel(false);
+                    onClickExtra?.();
+                  }}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all relative ${
+                    isActive
+                      ? 'bg-[#eb3237]/10 text-[#eb3237] font-bold'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#eb3237] rounded-r-full" />
+                  )}
+                  <Icon size={18} className={isActive ? 'text-[#eb3237]' : 'text-slate-500'} />
+                  <span className="flex-1">{label}</span>
+                  {badge > 0 && (
+                    <span className="min-w-[20px] h-5 bg-[#eb3237] text-white text-[9px] font-black rounded-full flex items-center justify-center px-1.5 shadow-sm shadow-red-500/20">
+                      {badge > 9 ? '9+' : badge}
+                    </span>
+                  )}
+                  {label === 'Ranking' && notifs.rankingChange && badge === 0 && (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  )}
+                </Link>
+              );
+            })}
           </div>
 
-          {/* Bottom section: Only Logout button */}
+          {/* Bottom: Logout */}
           <div className="p-4 border-t border-slate-150 bg-slate-50">
             <button
-              onClick={() => {
-                setDrawerOpen(false);
-                handleLogout();
-              }}
+              onClick={() => { setDrawerOpen(false); handleLogout(); }}
               className="w-full flex items-center gap-3 px-3 py-2.5 text-red-650 hover:bg-red-55 rounded-xl font-medium transition-colors cursor-pointer text-xs"
             >
               <LogOut size={16} />
@@ -259,9 +513,9 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Backdrop (Escurecimento da tela ao abrir o menu) */}
+      {/* Backdrop */}
       {drawerOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/30 backdrop-blur-xs z-40 transition-opacity duration-300"
           onClick={() => setDrawerOpen(false)}
         />
