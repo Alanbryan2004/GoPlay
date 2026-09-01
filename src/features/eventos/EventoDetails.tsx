@@ -1371,6 +1371,15 @@ export default function EventoDetails() {
     return a.nome.localeCompare(b.nome);
   });
 
+  // Cálculo do equilíbrio de estrelas (rating total e média por time)
+  const totalStarsTime1 = time1.reduce((sum, p) => sum + (p.avaliacao || 3), 0);
+  const avgStarsTime1 = time1.length > 0 ? (totalStarsTime1 / time1.length).toFixed(1) : '0.0';
+  
+  const totalStarsTime2 = time2.reduce((sum, p) => sum + (p.avaliacao || 3), 0);
+  const avgStarsTime2 = time2.length > 0 ? (totalStarsTime2 / time2.length).toFixed(1) : '0.0';
+  
+  const starDiff = Math.abs(totalStarsTime1 - totalStarsTime2).toFixed(1);
+
   // NOVO REQUISITO: Estimar o "Próximo Time" que vai jogar usando a prioridade N
   const { selecionados: estimadoProximoTime } = selecionarProximosJogadores(
     participantes,
@@ -1645,9 +1654,21 @@ export default function EventoDetails() {
 
               <div className="grid grid-cols-5 items-center">
                 {/* Time 1 */}
-                <div className="col-span-2 text-center space-y-3">
+                <div className="col-span-2 text-center space-y-2">
                   <span className="font-black text-sm text-red-700 block">Time A</span>
-                  <div className="flex justify-center items-center gap-1">
+                  
+                  {/* Badge de Estrelas / Rating do Time A */}
+                  <div className="flex flex-col items-center justify-center bg-red-50/80 border border-red-200/80 py-1 px-2 rounded-xl">
+                    <div className="flex items-center gap-1 text-amber-500 text-xs font-black">
+                      <Star size={13} className="fill-amber-400 text-amber-400" />
+                      <span>{totalStarsTime1.toFixed(1)} ★</span>
+                    </div>
+                    <span className="text-[9px] font-bold text-slate-500 mt-0.5">
+                      Média: {avgStarsTime1}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-center items-center gap-1 mt-1">
                     <button
                       onClick={() => setPlacarTime1((p) => Math.max(0, p - 1))}
                       className="p-1.5 rounded-lg bg-slate-50 text-slate-450 active:scale-90"
@@ -1667,14 +1688,39 @@ export default function EventoDetails() {
                   <p className="text-[10px] text-slate-500">Vitórias: {vitoriasTime1}</p>
                 </div>
 
-                <div className="col-span-1 text-center font-black text-slate-400 text-lg">
-                  X
+                {/* Divisor X + Badge de Indicador de Equilíbrio */}
+                <div className="col-span-1 text-center flex flex-col items-center justify-center space-y-1">
+                  <span className="font-black text-slate-400 text-lg">X</span>
+                  {time1.length > 0 && time2.length > 0 && (
+                    <div
+                      className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tight flex items-center gap-0.5 border ${
+                        Number(starDiff) <= 1.0
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}
+                      title={`Diferença de ${starDiff} estrela(s) entre os times`}
+                    >
+                      <span>{Number(starDiff) <= 1.0 ? '⚖️ Equilibrado' : `Δ ${starDiff}★`}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Time 2 */}
-                <div className="col-span-2 text-center space-y-3">
+                <div className="col-span-2 text-center space-y-2">
                   <span className="font-black text-sm text-blue-700 block">Time B</span>
-                  <div className="flex justify-center items-center gap-1">
+                  
+                  {/* Badge de Estrelas / Rating do Time B */}
+                  <div className="flex flex-col items-center justify-center bg-blue-50/80 border border-blue-200/80 py-1 px-2 rounded-xl">
+                    <div className="flex items-center gap-1 text-amber-500 text-xs font-black">
+                      <Star size={13} className="fill-amber-400 text-amber-400" />
+                      <span>{totalStarsTime2.toFixed(1)} ★</span>
+                    </div>
+                    <span className="text-[9px] font-bold text-slate-500 mt-0.5">
+                      Média: {avgStarsTime2}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-center items-center gap-1 mt-1">
                     <button
                       onClick={() => setPlacarTime2((p) => Math.max(0, p - 1))}
                       className="p-1.5 rounded-lg bg-slate-50 text-slate-450 active:scale-90"
