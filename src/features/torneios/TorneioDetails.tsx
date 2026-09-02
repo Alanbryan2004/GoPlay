@@ -33,6 +33,10 @@ export default function TorneioDetails() {
     onConfirm: () => {},
   });
 
+  const [todasPessoas, setTodasPessoas] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
+
   // Modal para Inscrever Time Fechado completo (Nome do Time + Jogadores)
   const [showInscreverTimeModal, setShowInscreverTimeModal] = useState(false);
   const [nomeNovoTime, setNomeNovoTime] = useState('');
@@ -43,7 +47,6 @@ export default function TorneioDetails() {
   // Modal para Adicionar Jogadores aos Inscritos (Sorteio)
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [targetTeamId, setTargetTeamId] = useState<string | null>(null);
-  const [todasPessoas, setTodasPessoas] = useState<any[]>([]);
   const [buscaAtleta, setBuscaAtleta] = useState('');
   const [sugestoesAtletas, setSugestoesAtletas] = useState<any[]>([]);
 
@@ -58,8 +61,14 @@ export default function TorneioDetails() {
 
   const loadTodasPessoas = async () => {
     try {
-      const { data } = await supabase.from('usuarios').select('id, nome, foto, email');
-      if (data) setTodasPessoas(data);
+      const { data: dbUsers } = await supabase.from('usuarios').select('id, nome, foto, email');
+      if (dbUsers) setTodasPessoas(dbUsers);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const myProfile = dbUsers?.find((u) => u.email === user.email) || { id: user.id, email: user.email, nome: user.user_metadata?.name || 'Eu' };
+        setCurrentUser(myProfile);
+      }
     } catch (e) {
       console.error('Erro ao carregar usuários:', e);
     }
@@ -287,6 +296,42 @@ export default function TorneioDetails() {
       message: `O time "${nomeNovoTime.trim()}" foi inscrito com sucesso no torneio com ${jogadoresTimeFechado.length} jogadores!`,
       type: 'alert',
       onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+    });
+  };
+
+  // Excluir / Cancelar Inscrição do Time
+  const handleExcluirTime = (teamId: string, teamNome: string) => {
+    if (!torneio) return;
+    setDialog({
+      isOpen: true,
+      title: 'Excluir Time',
+      message: `Tem certeza que deseja cancelar a inscrição do time "${teamNome}"?`,
+      type: 'confirm',
+      onCancel: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setDialog((prev) => ({ ...prev, isOpen: false }));
+
+        const timeRemovido = torneio.times.find((t) => t.id === teamId);
+        const idsRemovidos = timeRemovido?.jogadores?.map((j) => j.id) || [];
+
+        const novosTimes = torneio.times.map((t) => {
+          if (t.id === teamId) {
+            return {
+              id: t.id,
+              nome: `Time ${t.id.replace('t_', '').split('_')[0]}`,
+              jogadores: [],
+            };
+          }
+          return t;
+        });
+
+        // Limpa também dos participantes gerais
+        const novosParticipantes = (torneio.participantes || []).filter((p) => !idsRemovidos.includes(p.id));
+
+        const updates = { times: novosTimes, participantes: novosParticipantes };
+        setTorneio({ ...torneio, ...updates });
+        await supabase.from('torneios').update(updates).eq('id', torneio.id);
+      },
     });
   };
 
@@ -626,18 +671,74 @@ export default function TorneioDetails() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={torneio.tipo_times === 'fechado' ? () => {
-                setTargetTeamId(null);
-                setNomeNovoTime('');
-                setJogadoresTimeFechado([]);
-                setShowInscreverTimeModal(true);
-              } : handleParticiparIndividual}
-              className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <UserPlus size={14} />
-              <span>{torneio.tipo_times === 'fechado' ? 'Inscrever Meu Time' : 'Quero Participar'}</span>
-            </button>
+            {/* Regras para exibição do botão de inscrição */}
+            {(() => {
+              const isAdmin = currentUser && torneio.criador_id === currentUser.id;
+              const meuTime = currentUser && torneio.times.find((t) => t.jogadores?.some((j) => j.id === currentUser.id));
+
+              if (torneio.tipo_times === 'fechado') {
+                if (meuTime) {
+                  // O usuário já está em um time!
+                  return (
+                    <button
+                      onClick={() => {
+                        setTargetTeamId(meuTime.id);
+                        setNomeNovoTime(meuTime.nome);
+                        setJogadoresTimeFechado(meuTime.jogadores || []);
+                        setShowInscreverTimeModal(true);
+                      }}
+                      className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <UserCheck size={14} />
+                      <span>Meu Time ({meuTime.nome})</span>
+                    </button>
+                  );
+                } else if (isAdmin) {
+                  // É o administrador que criou o torneio
+                  return (
+                    <button
+                      onClick={() => {
+                        setTargetTeamId(null);
+                        setNomeNovoTime('');
+                        setJogadoresTimeFechado([]);
+                        setShowInscreverTimeModal(true);
+                      }}
+                      className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <UserPlus size={14} />
+                      <span>Inscrever Time</span>
+                    </button>
+                  );
+                } else {
+                  // Usuário comum que ainda não está em nenhum time
+                  return (
+                    <button
+                      onClick={() => {
+                        setTargetTeamId(null);
+                        setNomeNovoTime('');
+                        setJogadoresTimeFechado([]);
+                        setShowInscreverTimeModal(true);
+                      }}
+                      className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <UserPlus size={14} />
+                      <span>Inscrever Meu Time</span>
+                    </button>
+                  );
+                }
+              } else {
+                // Sorteio individual
+                return (
+                  <button
+                    onClick={handleParticiparIndividual}
+                    className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <UserPlus size={14} />
+                    <span>Quero Participar</span>
+                  </button>
+                );
+              }
+            })()}
 
             <button
               onClick={() => setEditDateModal(true)}
@@ -728,44 +829,122 @@ export default function TorneioDetails() {
               const jogadoresCount = time.jogadores?.length || 0;
               const maxJogadores = torneio.jogadores_por_time || 2;
               const isCompleto = jogadoresCount >= maxJogadores;
+              const isExpanded = expandedTeamId === time.id;
+              const temJogadores = (time.jogadores?.length || 0) > 0;
+              const isAdmin = currentUser && torneio.criador_id === currentUser.id;
+              const isMeuTime = currentUser && time.jogadores?.some((j) => j.id === currentUser.id);
 
               return (
-                <div key={time.id} className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-                  <div className="flex justify-between items-center pb-1 border-b border-slate-200">
+                <div
+                  key={time.id}
+                  onClick={() => {
+                    if (temJogadores) {
+                      setExpandedTeamId(isExpanded ? null : time.id);
+                    }
+                  }}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer space-y-2 ${
+                    isExpanded
+                      ? 'bg-amber-50/80 border-amber-300 shadow-md ring-2 ring-amber-400/20'
+                      : temJogadores
+                      ? 'bg-slate-50 border-slate-200 hover:border-amber-300'
+                      : 'bg-slate-50/50 border-dashed border-slate-200'
+                  }`}
+                >
+                  <div className="flex justify-between items-center pb-1 border-b border-slate-200/80">
                     <span className="font-black text-xs text-slate-800 truncate">{time.nome}</span>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isCompleto ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                        isCompleto ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
                       {jogadoresCount}/{maxJogadores}
                     </span>
                   </div>
 
-                  <div className="space-y-1">
-                    {(time.jogadores || []).map((j) => (
-                      <div key={j.id} className="flex justify-between items-center text-xs font-semibold text-slate-700 bg-white p-1.5 rounded-lg border border-slate-150">
-                        <span className="truncate">{j.nome}</span>
-                        <button
-                          onClick={() => handleRemoverAtletaDoTime(time.id, j.id)}
-                          className="text-slate-300 hover:text-red-500 transition-colors p-0.5"
-                        >
-                          <Trash2 size={11} />
-                        </button>
-                      </div>
-                    ))}
+                  {/* Se tiver jogadores e estiver expandido: mostra o elenco */}
+                  {temJogadores ? (
+                    <div className="space-y-1.5 pt-1">
+                      {isExpanded ? (
+                        <div className="space-y-1">
+                          {(time.jogadores || []).map((j) => (
+                            <div
+                              key={j.id}
+                              className="flex justify-between items-center text-xs font-semibold text-slate-700 bg-white p-1.5 rounded-lg border border-slate-200"
+                            >
+                              <span className="truncate">👤 {j.nome}</span>
+                              {(isAdmin || isMeuTime) && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoverAtletaDoTime(time.id, j.id);
+                                  }}
+                                  className="text-slate-300 hover:text-red-500 transition-colors p-0.5"
+                                  title="Remover Jogador"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
 
-                    {!isCompleto && (
-                      <button
-                        onClick={() => {
-                          setTargetTeamId(time.id);
-                          setNomeNovoTime(time.nome.startsWith('Time ') ? '' : time.nome);
-                          setJogadoresTimeFechado(time.jogadores || []);
-                          setShowInscreverTimeModal(true);
-                        }}
-                        className="w-full py-1.5 border border-dashed border-amber-300 rounded-lg text-left text-[10px] font-bold text-amber-700 hover:bg-amber-50 transition-all flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <Plus size={10} />
-                        <span>Inscrever Time</span>
-                      </button>
-                    )}
-                  </div>
+                          {(isAdmin || isMeuTime) && (
+                            <div className="flex gap-1 pt-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setTargetTeamId(time.id);
+                                  setNomeNovoTime(time.nome);
+                                  setJogadoresTimeFechado(time.jogadores || []);
+                                  setShowInscreverTimeModal(true);
+                                }}
+                                className="flex-1 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold transition-all"
+                              >
+                                Editar Elenco
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleExcluirTime(time.id, time.nome);
+                                }}
+                                className="p-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[10px] font-bold border border-red-200"
+                                title="Excluir Time"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] font-semibold text-slate-500 flex items-center justify-between">
+                          <span>Clique para ver {jogadoresCount} atletas</span>
+                          <span className="text-amber-600 font-bold">▼</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Slot Vago */
+                    <div>
+                      {(isAdmin || !currentUser || !torneio.times.some((t) => t.jogadores?.some((j) => j.id === currentUser?.id))) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTargetTeamId(time.id);
+                            setNomeNovoTime('');
+                            setJogadoresTimeFechado([]);
+                            setShowInscreverTimeModal(true);
+                          }}
+                          className="w-full py-2 border border-dashed border-amber-300 rounded-lg text-center text-[10px] font-bold text-amber-700 hover:bg-amber-50 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <Plus size={11} />
+                          <span>Inscrever Time</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1009,14 +1188,23 @@ export default function TorneioDetails() {
                       onChange={(e) => {
                         const txt = e.target.value;
                         setBuscaJogadorTime(txt);
-                        if (!txt.trim()) {
+                        if (!txt.trim() || !torneio) {
                           setSugestoesJogadorTime([]);
                           return;
                         }
-                        const filtrados = todasPessoas.filter((p) =>
-                          p.nome.toLowerCase().includes(txt.toLowerCase()) ||
-                          p.email?.toLowerCase().includes(txt.toLowerCase())
-                        );
+                        // Pega todos os IDs de atletas que já estão em qualquer time do torneio
+                        const idsJaEmTime = torneio.times.flatMap((t) => (t.jogadores || []).map((j) => j.id));
+
+                        const filtrados = todasPessoas.filter((p) => {
+                          const jaEstaEmUmTime = idsJaEmTime.includes(p.id);
+                          const jaEstaNoDraftModal = jogadoresTimeFechado.some((j) => j.id === p.id);
+                          if (jaEstaEmUmTime || jaEstaNoDraftModal) return false;
+
+                          return (
+                            p.nome.toLowerCase().includes(txt.toLowerCase()) ||
+                            p.email?.toLowerCase().includes(txt.toLowerCase())
+                          );
+                        });
                         setSugestoesJogadorTime(filtrados.slice(0, 5));
                       }}
                       placeholder="Adicionar jogador pelo nome..."
