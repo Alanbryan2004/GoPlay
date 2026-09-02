@@ -36,6 +36,7 @@ export default function TorneioDetails() {
   const [todasPessoas, setTodasPessoas] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
+  const [showParticipantesModal, setShowParticipantesModal] = useState(false);
 
   // Modal para Inscrever Time Fechado completo (Nome do Time + Jogadores)
   const [showInscreverTimeModal, setShowInscreverTimeModal] = useState(false);
@@ -771,63 +772,52 @@ export default function TorneioDetails() {
         </div>
       </div>
 
-      {/* Lista de Atletas / Participantes Inscritos */}
-      <div className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3 text-left">
+      {/* Card de Resumo dos Jogadores Inscritos (Compacto e Clicável para Visualização) */}
+      <div
+        onClick={() => {
+          if (torneio.participantes && torneio.participantes.length > 0) {
+            setShowParticipantesModal(true);
+          }
+        }}
+        className={`glass p-4 rounded-2xl border border-slate-200 shadow-sm transition-all text-left ${
+          torneio.participantes && torneio.participantes.length > 0 ? 'cursor-pointer hover:border-emerald-300 hover:shadow-md' : ''
+        }`}
+      >
         <div className="flex items-center justify-between">
-          <h3 className="font-black text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-            <UserCheck size={14} className="text-emerald-500" />
-            Jogadores Inscritos ({torneio.participantes?.length || 0}/{(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)})
-          </h3>
-
-          <button
-            onClick={torneio.tipo_times === 'fechado' ? () => {
-              setTargetTeamId(null);
-              setNomeNovoTime('');
-              setJogadoresTimeFechado([]);
-              setShowInscreverTimeModal(true);
-            } : () => {
-              setTargetTeamId(null);
-              setShowAddUserModal(true);
-            }}
-            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95"
-          >
-            <Plus size={12} />
-            <span>{torneio.tipo_times === 'fechado' ? 'Cadastrar Time' : 'Adicionar Atleta'}</span>
-          </button>
-        </div>
-
-        {/* Lista visual dos atletas inscritos */}
-        {torneio.participantes && torneio.participantes.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2">
-            {torneio.participantes.map((p) => (
-              <div key={p.id} className="p-2 rounded-xl bg-slate-50 border border-slate-150 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 truncate">
-                  {p.foto ? (
-                    <img src={p.foto} alt={p.nome} className="w-6 h-6 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px] shrink-0">
-                      {p.nome.charAt(0)}
-                    </div>
-                  )}
-                  <span className="text-xs font-bold text-slate-800 truncate">{p.nome}</span>
-                </div>
-                <button
-                  onClick={() => handleRemoverParticipante(p.id)}
-                  className="p-1 text-slate-300 hover:text-red-500 rounded-lg transition-colors shrink-0 cursor-pointer"
-                  title="Remover Atleta"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            ))}
+          <div className="flex items-center gap-2">
+            <UserCheck size={16} className="text-emerald-500" />
+            <div>
+              <h3 className="font-black text-xs uppercase tracking-wider text-slate-800">
+                Jogadores Inscritos
+              </h3>
+              <p className="text-[10px] text-slate-500 font-medium">
+                {torneio.participantes?.length || 0} de {(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)} atletas confirmados
+              </p>
+            </div>
           </div>
-        ) : (
-          <p className="text-xs text-slate-400 py-2">
-            {torneio.tipo_times === 'fechado'
-              ? 'Nenhum time inscrito ainda. Clique em "Inscrever Meu Time" para cadastrar a equipe.'
-              : 'Nenhum jogador cadastrado ainda. Clique em "Quero Participar" ou em "+ Adicionar Atleta".'}
-          </p>
-        )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+              {torneio.participantes?.length || 0}/{(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)}
+            </span>
+
+            {/* Apenas no modo sorteio individual exibe o botão de adicionar atleta */}
+            {torneio.tipo_times === 'sorteio' && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTargetTeamId(null);
+                  setShowAddUserModal(true);
+                }}
+                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95"
+              >
+                <Plus size={12} />
+                <span>Adicionar</span>
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* SE FOR TIMES FECHADOS: Painel de Escalação de Cada Time */}
@@ -1397,6 +1387,61 @@ export default function TorneioDetails() {
                 <button
                   onClick={() => setShowAddUserModal(false)}
                   className="w-full py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Somente Leitura de Jogadores Inscritos */}
+      <AnimatePresence>
+        {showParticipantesModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <div className="bg-white p-5 rounded-2xl w-full max-w-sm space-y-4 shadow-2xl text-left max-h-[85vh] flex flex-col">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100 shrink-0">
+                <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                  <UserCheck className="text-emerald-500" size={18} />
+                  Atletas Inscritos
+                </h3>
+                <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  {torneio?.participantes?.length || 0} confirmados
+                </span>
+              </div>
+
+              <div className="overflow-y-auto space-y-2 flex-1 pr-1">
+                {torneio?.participantes && torneio.participantes.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {torneio.participantes.map((p) => (
+                      <div key={p.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-150 flex items-center gap-2 truncate">
+                        {p.foto ? (
+                          <img src={p.foto} alt={p.nome} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px] shrink-0">
+                            {p.nome.charAt(0)}
+                          </div>
+                        )}
+                        <span className="text-xs font-bold text-slate-800 truncate">{p.nome}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 py-4 text-center">Nenhum jogador cadastrado ainda.</p>
+                )}
+              </div>
+
+              <div className="pt-2 shrink-0 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowParticipantesModal(false)}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
                 >
                   Fechar
                 </button>
