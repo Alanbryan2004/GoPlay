@@ -1,6 +1,8 @@
 export interface TorneioTime {
   id: string;
   nome: string;
+  criador_id?: string; // ID do usuário que cadastrou este time (Capitão)
+  cor?: string; // Cor do card do time
   jogadores?: { id: string; nome: string }[];
 }
 

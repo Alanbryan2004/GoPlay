@@ -244,14 +244,28 @@ export default function TorneioDetails() {
       return;
     }
 
+    // Paleta de cores vibrantes para distinguir os cards dos times
+    const teamColors = [
+      'bg-amber-500/10 border-amber-300 text-amber-950',
+      'bg-blue-500/10 border-blue-300 text-blue-950',
+      'bg-emerald-500/10 border-emerald-300 text-emerald-950',
+      'bg-purple-500/10 border-purple-300 text-purple-950',
+      'bg-rose-500/10 border-rose-300 text-rose-950',
+      'bg-cyan-500/10 border-cyan-300 text-cyan-950',
+      'bg-orange-500/10 border-orange-300 text-orange-950',
+      'bg-indigo-500/10 border-indigo-300 text-indigo-950',
+    ];
+
     // Procura o primeiro slot de time vago ou atualiza o slot alvo
     let timeSubstituido = false;
-    const novosTimes = torneio.times.map((t) => {
+    const novosTimes = torneio.times.map((t, idx) => {
       if (!timeSubstituido && (targetTeamId ? t.id === targetTeamId : (!t.jogadores || t.jogadores.length === 0))) {
         timeSubstituido = true;
         return {
           ...t,
           nome: nomeNovoTime.trim(),
+          criador_id: currentUser?.id || t.criador_id,
+          cor: t.cor || teamColors[idx % teamColors.length],
           jogadores: jogadoresTimeFechado,
         };
       }
@@ -825,14 +839,31 @@ export default function TorneioDetails() {
           </h3>
 
           <div className="grid grid-cols-2 gap-3">
-            {torneio.times.map((time) => {
+            {torneio.times.map((time, idx) => {
               const jogadoresCount = time.jogadores?.length || 0;
               const maxJogadores = torneio.jogadores_por_time || 2;
               const isCompleto = jogadoresCount >= maxJogadores;
               const isExpanded = expandedTeamId === time.id;
               const temJogadores = (time.jogadores?.length || 0) > 0;
+              
               const isAdmin = currentUser && torneio.criador_id === currentUser.id;
-              const isMeuTime = currentUser && time.jogadores?.some((j) => j.id === currentUser.id);
+              // Somente quem incluiu o time (Capitão) ou o Admin do Torneio pode editar/excluir o time
+              const isCriadorDoTime = currentUser && time.criador_id && time.criador_id === currentUser.id;
+              const podeGerenciarTime = isAdmin || isCriadorDoTime;
+
+              // Paleta de cores distintas para os cards dos times
+              const cardColors = [
+                { bg: 'bg-amber-500/10', border: 'border-amber-300', text: 'text-amber-950', badge: 'bg-amber-100 text-amber-900' },
+                { bg: 'bg-blue-500/10', border: 'border-blue-300', text: 'text-blue-950', badge: 'bg-blue-100 text-blue-900' },
+                { bg: 'bg-emerald-500/10', border: 'border-emerald-300', text: 'text-emerald-950', badge: 'bg-emerald-100 text-emerald-900' },
+                { bg: 'bg-purple-500/10', border: 'border-purple-300', text: 'text-purple-950', badge: 'bg-purple-100 text-purple-900' },
+                { bg: 'bg-rose-500/10', border: 'border-rose-300', text: 'text-rose-950', badge: 'bg-rose-100 text-rose-900' },
+                { bg: 'bg-cyan-500/10', border: 'border-cyan-300', text: 'text-cyan-950', badge: 'bg-cyan-100 text-cyan-900' },
+                { bg: 'bg-orange-500/10', border: 'border-orange-300', text: 'text-orange-950', badge: 'bg-orange-100 text-orange-900' },
+                { bg: 'bg-indigo-500/10', border: 'border-indigo-300', text: 'text-indigo-950', badge: 'bg-indigo-100 text-indigo-900' },
+              ];
+
+              const currentColor = cardColors[idx % cardColors.length];
 
               return (
                 <div
@@ -843,25 +874,23 @@ export default function TorneioDetails() {
                     }
                   }}
                   className={`p-3 rounded-2xl border transition-all cursor-pointer space-y-2 ${
-                    isExpanded
-                      ? 'bg-amber-50/80 border-amber-300 shadow-md ring-2 ring-amber-400/20'
-                      : temJogadores
-                      ? 'bg-slate-50 border-slate-200 hover:border-amber-300'
+                    temJogadores
+                      ? `${currentColor.bg} ${currentColor.border} ${isExpanded ? 'shadow-md ring-2 ring-amber-400/30' : 'hover:opacity-90'}`
                       : 'bg-slate-50/50 border-dashed border-slate-200'
                   }`}
                 >
                   <div className="flex justify-between items-center pb-1 border-b border-slate-200/80">
-                    <span className="font-black text-xs text-slate-800 truncate">{time.nome}</span>
+                    <span className="font-black text-xs text-slate-900 truncate">{time.nome}</span>
                     <span
                       className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
-                        isCompleto ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
+                        isCompleto ? 'bg-emerald-200/80 text-emerald-950' : currentColor.badge
                       }`}
                     >
                       {jogadoresCount}/{maxJogadores}
                     </span>
                   </div>
 
-                  {/* Se tiver jogadores e estiver expandido: mostra o elenco */}
+                  {/* Se tiver jogadores: exibe retraído ou expandido ao clicar */}
                   {temJogadores ? (
                     <div className="space-y-1.5 pt-1">
                       {isExpanded ? (
@@ -869,27 +898,15 @@ export default function TorneioDetails() {
                           {(time.jogadores || []).map((j) => (
                             <div
                               key={j.id}
-                              className="flex justify-between items-center text-xs font-semibold text-slate-700 bg-white p-1.5 rounded-lg border border-slate-200"
+                              className="flex justify-between items-center text-xs font-semibold text-slate-800 bg-white/90 p-1.5 rounded-lg border border-slate-200/60 shadow-2xs"
                             >
                               <span className="truncate">👤 {j.nome}</span>
-                              {(isAdmin || isMeuTime) && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRemoverAtletaDoTime(time.id, j.id);
-                                  }}
-                                  className="text-slate-300 hover:text-red-500 transition-colors p-0.5"
-                                  title="Remover Jogador"
-                                >
-                                  <Trash2 size={11} />
-                                </button>
-                              )}
                             </div>
                           ))}
 
-                          {(isAdmin || isMeuTime) && (
-                            <div className="flex gap-1 pt-1">
+                          {/* Botão de edição do elenco completo (Apenas para quem incluiu o time ou Admin) */}
+                          {podeGerenciarTime && (
+                            <div className="flex gap-1 pt-2">
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -899,7 +916,7 @@ export default function TorneioDetails() {
                                   setJogadoresTimeFechado(time.jogadores || []);
                                   setShowInscreverTimeModal(true);
                                 }}
-                                className="flex-1 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold transition-all"
+                                className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black transition-all shadow-xs cursor-pointer"
                               >
                                 Editar Elenco
                               </button>
@@ -909,7 +926,7 @@ export default function TorneioDetails() {
                                   e.stopPropagation();
                                   handleExcluirTime(time.id, time.nome);
                                 }}
-                                className="p-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[10px] font-bold border border-red-200"
+                                className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-[10px] font-bold border border-red-200 cursor-pointer"
                                 title="Excluir Time"
                               >
                                 <Trash2 size={12} />
@@ -918,9 +935,9 @@ export default function TorneioDetails() {
                           )}
                         </div>
                       ) : (
-                        <div className="text-[10px] font-semibold text-slate-500 flex items-center justify-between">
-                          <span>Clique para ver {jogadoresCount} atletas</span>
-                          <span className="text-amber-600 font-bold">▼</span>
+                        <div className="text-[10px] font-bold text-slate-600 flex items-center justify-between">
+                          <span>{jogadoresCount} atletas</span>
+                          <span className="text-slate-400 font-bold text-[9px]">▼ Clique para ver</span>
                         </div>
                       )}
                     </div>
