@@ -34,6 +34,7 @@ export interface Torneio {
   participantes?: { id: string; nome: string; foto?: string }[]; // Lista de inscritos no torneio
   times: TorneioTime[];
   chaveamento: TorneioConfronto[];
-  status: 'rascunho' | 'sorteado' | 'em_andamento' | 'finalizado';
+  status: 'rascunho' | 'sorteado' | 'em_andamento' | 'finalizado' | 'encerrado';
+  campeao_id?: string;
   created_at?: string;
 }

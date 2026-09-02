@@ -1,8 +1,9 @@
+import confetti from 'canvas-confetti';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import type { Torneio, TorneioConfronto } from '../../types/torneio';
-import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users, Link, Share2, Lock, Play, BarChart2 } from 'lucide-react';
+import type { Torneio, TorneioConfronto, TorneioTime } from '../../types/torneio';
+import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users, Link, Share2, Lock, Play, BarChart2, Sparkles, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import Dialog from '../../components/common/Dialog';
@@ -16,6 +17,7 @@ export default function TorneioDetails() {
   const [sorteando, setSorteando] = useState(false);
   const [showDrawAnimation, setShowDrawAnimation] = useState(false);
   const [editDateModal, setEditDateModal] = useState(false);
+  const [winnerModal, setWinnerModal] = useState<TorneioTime | null>(null);
   
   // Modal de Avisos e Confirmações elegante (Dialog)
   const [dialog, setDialog] = useState<{
@@ -639,6 +641,32 @@ export default function TorneioDetails() {
     }
   };
 
+  const triggerConfetti = () => {
+    const duration = 3.5 * 1000;
+    const end = Date.now() + duration;
+
+    (function frame() {
+      confetti({
+        particleCount: 5,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 },
+        colors: ['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6'],
+      });
+      confetti({
+        particleCount: 5,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 },
+        colors: ['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6'],
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    })();
+  };
+
   const handleAtualizarPlacar = async (matchId: string, pA: number, pB: number) => {
     if (!torneio) return;
 
@@ -652,12 +680,19 @@ export default function TorneioDetails() {
       return c;
     });
 
+    let campeaoTime: TorneioTime | null = null;
+
     // Se for formato de chaveamento eliminatório, propaga os vencedores para os confrontos já existentes das próximas fases!
     if (torneio.formato === 'chaveamento') {
       const matchAtual = novosConfrontos.find((m) => m.id === matchId);
       if (matchAtual && matchAtual.vencedorId) {
         const timeVencedor = matchAtual.vencedorId === matchAtual.timeA.id ? matchAtual.timeA : matchAtual.timeB;
         const faseAtual = matchAtual.fase;
+
+        // Se for a grande FINAL, o vencedor é o CAMPEÃO do torneio!
+        if (faseAtual === 'Final') {
+          campeaoTime = timeVencedor;
+        }
 
         // Se for Semifinal e o vencedor foi definido, atualiza ou cria o jogo da Final
         if (faseAtual === 'Semifinal') {
@@ -666,7 +701,6 @@ export default function TorneioDetails() {
           let finalMatchIndex = novosConfrontos.findIndex((m) => m.fase === 'Final');
 
           if (finalMatchIndex === -1) {
-            // Se o torneio foi sorteado na versão anterior (sem o placeholder da final), cria a Final agora!
             const semi1Vencedor = semis[0]?.vencedorId ? (semis[0].vencedorId === semis[0].timeA.id ? semis[0].timeA : semis[0].timeB) : { id: 'pending_semi_0', nome: 'Vencedor Semi 1' };
             const semi2Vencedor = semis[1]?.vencedorId ? (semis[1].vencedorId === semis[1].timeA.id ? semis[1].timeA : semis[1].timeB) : { id: 'pending_semi_1', nome: 'Vencedor Semi 2' };
 
@@ -714,8 +748,19 @@ export default function TorneioDetails() {
       }
     }
 
-    setTorneio({ ...torneio, chaveamento: novosConfrontos });
-    await supabase.from('torneios').update({ chaveamento: novosConfrontos }).eq('id', torneio.id);
+    const updatesToDb: any = { chaveamento: novosConfrontos };
+    if (campeaoTime) {
+      updatesToDb.campeao_id = campeaoTime.id;
+      updatesToDb.status = 'encerrado';
+    }
+
+    setTorneio({ ...torneio, chaveamento: novosConfrontos, campeao_id: campeaoTime ? campeaoTime.id : torneio.campeao_id });
+    await supabase.from('torneios').update(updatesToDb).eq('id', torneio.id);
+
+    if (campeaoTime) {
+      setWinnerModal(campeaoTime);
+      triggerConfetti();
+    }
   };
 
   const handleCopiarLink = () => {
@@ -804,6 +849,38 @@ export default function TorneioDetails() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Banner Permanente de Campeão do Torneio */}
+      {torneio.campeao_id && (() => {
+        const timeCampeao = torneio.times.find((t) => t.id === torneio.campeao_id);
+        if (!timeCampeao) return null;
+
+        return (
+          <div
+            onClick={() => {
+              setWinnerModal(timeCampeao);
+              triggerConfetti();
+            }}
+            className="bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-500 p-4 rounded-2xl text-slate-950 shadow-lg cursor-pointer hover:shadow-xl transition-all flex items-center justify-between border border-amber-300 active:scale-98"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center font-black shadow-md shrink-0">
+                <Trophy size={22} />
+              </div>
+              <div className="text-left">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-900 bg-amber-300/60 px-2 py-0.5 rounded-full">
+                  🏆 CAMPEÃO DO TORNEIO
+                </span>
+                <h3 className="font-black text-base leading-tight text-slate-950 mt-0.5">{timeCampeao.nome}</h3>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 text-[11px] font-black text-slate-900 bg-white/40 px-2.5 py-1 rounded-xl shadow-2xs">
+              <Sparkles size={12} />
+              <span>Ver Pódio</span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -1466,6 +1543,77 @@ export default function TorneioDetails() {
           <span>Classificação</span>
         </button>
       </div>
+
+      {/* Modal de Animação e Celebração do Campeão do Torneio */}
+      <AnimatePresence>
+        {winnerModal && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/30 p-6 rounded-3xl w-full max-w-sm text-center space-y-6 shadow-2xl relative overflow-hidden text-white">
+              {/* Brilhos de fundo */}
+              <div className="absolute -top-12 -left-12 w-32 h-32 bg-amber-500/20 rounded-full blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-red-500/20 rounded-full blur-2xl pointer-events-none" />
+
+              <button
+                onClick={() => setWinnerModal(null)}
+                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-white/5 transition-all"
+              >
+                <X size={18} />
+              </button>
+
+              <motion.div
+                animate={{ rotate: [0, -10, 10, -5, 5, 0], scale: [1, 1.15, 1] }}
+                transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+                className="w-24 h-24 mx-auto bg-gradient-to-tr from-amber-400 via-amber-500 to-yellow-300 rounded-full p-1 shadow-xl shadow-amber-500/30 flex items-center justify-center"
+              >
+                <div className="w-full h-full bg-slate-900 rounded-full flex items-center justify-center">
+                  <Trophy size={48} className="text-amber-400" />
+                </div>
+              </motion.div>
+
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 border border-amber-500/40 rounded-full text-[10px] font-black text-amber-300 uppercase tracking-widest">
+                  <Sparkles size={12} />
+                  <span>Grande Campeão</span>
+                </div>
+                <h2 className="text-3xl font-black text-white tracking-tight">{winnerModal.nome}</h2>
+                <p className="text-xs text-slate-300 font-medium">Parabéns a todos os atletas pela grande conquista no torneio!</p>
+              </div>
+
+              {/* Elenco do Campeão */}
+              {winnerModal.jogadores && winnerModal.jogadores.length > 0 && (
+                <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl space-y-2 text-left">
+                  <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">Integrantes do Elenco</span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {winnerModal.jogadores.map((j) => (
+                      <div key={j.id} className="text-xs font-bold text-slate-200 flex items-center gap-1">
+                        <span>🏅</span>
+                        <span className="truncate">{j.nome}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setWinnerModal(null);
+                  triggerConfetti();
+                }}
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-black rounded-2xl text-xs uppercase tracking-wider shadow-lg active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Trophy size={16} />
+                <span>Comemorar Novamente! 🎊</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modal de Edição de Datas */}
       <AnimatePresence>
