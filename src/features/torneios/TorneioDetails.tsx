@@ -1137,10 +1137,11 @@ export default function TorneioDetails() {
               </div>
             ) : (
               <div className="space-y-4 text-left">
-                {/* Abas por Fase de Chave (Ex: Todas, Oitavas, Quartas, Semifinal, Final) */}
+                {/* Abas por Fase de Chave (Ex: Todas, Quartas de Final, Semifinal, Final) */}
                 {(() => {
+                  const ordemDesejada = ['Todas', 'Oitavas de Final', 'Quartas de Final', 'Semifinal', 'Final'];
                   const fasesDisponiveis = Array.from(new Set(torneio.chaveamento.map((m) => m.fase)));
-                  const fasesList = ['Todas', ...fasesDisponiveis];
+                  const fasesList = ordemDesejada.filter((f) => f === 'Todas' || fasesDisponiveis.includes(f));
 
                   return (
                     <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -1150,7 +1151,7 @@ export default function TorneioDetails() {
                           type="button"
                           onClick={() => setActivePhaseTab(fase)}
                           className={`px-3.5 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer ${
-                            activePhaseTab === fase
+                            activePhaseTab === fase || (activePhaseTab !== 'Todas' && !fasesDisponiveis.includes(activePhaseTab) && fase === 'Todas')
                               ? 'bg-amber-500 text-white shadow-md'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
@@ -1165,7 +1166,13 @@ export default function TorneioDetails() {
                 {/* Lista de Partidas filtrada pela aba de Fase */}
                 <div className="space-y-3">
                   {torneio.chaveamento
-                    .filter((m) => activePhaseTab === 'Todas' || m.fase === activePhaseTab)
+                    .filter((m) => {
+                      const fasesDisponiveis = Array.from(new Set(torneio.chaveamento.map((x) => x.fase)));
+                      if (activePhaseTab !== 'Todas' && !fasesDisponiveis.includes(activePhaseTab)) {
+                        return true; // Se a aba anterior não existe neste torneio, mostra Todas
+                      }
+                      return activePhaseTab === 'Todas' || m.fase === activePhaseTab;
+                    })
                     .map((match) => {
                       const isAdmin = currentUser && torneio.criador_id === currentUser.id;
                       const isFinalizado = (match.placarA || 0) > 0 || (match.placarB || 0) > 0 || match.vencedorId;
