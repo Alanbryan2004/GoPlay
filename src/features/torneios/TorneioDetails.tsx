@@ -485,19 +485,69 @@ export default function TorneioDetails() {
 
     if (torneio.formato === 'chaveamento') {
       const numTimes = timesEmbaralhados.length;
-      let faseNome = 'Quartas de Final';
-      if (numTimes <= 4) faseNome = 'Semifinal';
-      if (numTimes <= 2) faseNome = 'Final';
 
-      for (let i = 0; i < numTimes; i += 2) {
-        const timeA = timesEmbaralhados[i];
-        const timeB = timesEmbaralhados[i + 1] || { id: 'bye', nome: 'Aguardando' };
+      if (numTimes <= 4) {
+        // 1. Cria os jogos das Semifinais
         novosConfrontos.push({
-          id: `match_${i / 2}_${Date.now()}`,
-          fase: faseNome,
+          id: `match_semi_0_${Date.now()}`,
+          fase: 'Semifinal',
           rodada: 1,
-          timeA,
-          timeB,
+          timeA: timesEmbaralhados[0],
+          timeB: timesEmbaralhados[1],
+          placarA: 0,
+          placarB: 0,
+        });
+
+        novosConfrontos.push({
+          id: `match_semi_1_${Date.now()}`,
+          fase: 'Semifinal',
+          rodada: 1,
+          timeA: timesEmbaralhados[2],
+          timeB: timesEmbaralhados[3],
+          placarA: 0,
+          placarB: 0,
+        });
+
+        // 2. Já cria a grande Final com os placeholders aguardando os vencedores!
+        novosConfrontos.push({
+          id: `match_final_0_${Date.now()}`,
+          fase: 'Final',
+          rodada: 2,
+          timeA: { id: 'pending_semi_0', nome: 'Vencedor Semi 1' },
+          timeB: { id: 'pending_semi_1', nome: 'Vencedor Semi 2' },
+          placarA: 0,
+          placarB: 0,
+        });
+      } else if (numTimes <= 8) {
+        // Quartas de Final -> Semifinais -> Final
+        for (let i = 0; i < 4; i++) {
+          novosConfrontos.push({
+            id: `match_quartas_${i}_${Date.now()}`,
+            fase: 'Quartas de Final',
+            rodada: 1,
+            timeA: timesEmbaralhados[i * 2],
+            timeB: timesEmbaralhados[i * 2 + 1],
+            placarA: 0,
+            placarB: 0,
+          });
+        }
+        for (let i = 0; i < 2; i++) {
+          novosConfrontos.push({
+            id: `match_semi_${i}_${Date.now()}`,
+            fase: 'Semifinal',
+            rodada: 2,
+            timeA: { id: `pending_q_${i * 2}`, nome: `Vencedor Q${i * 2 + 1}` },
+            timeB: { id: `pending_q_${i * 2 + 1}`, nome: `Vencedor Q${i * 2 + 2}` },
+            placarA: 0,
+            placarB: 0,
+          });
+        }
+        novosConfrontos.push({
+          id: `match_final_0_${Date.now()}`,
+          fase: 'Final',
+          rodada: 3,
+          timeA: { id: 'pending_semi_0', nome: 'Vencedor Semi 1' },
+          timeB: { id: 'pending_semi_1', nome: 'Vencedor Semi 2' },
           placarA: 0,
           placarB: 0,
         });
@@ -557,6 +607,7 @@ export default function TorneioDetails() {
 
   const handleAtualizarPlacar = async (matchId: string, pA: number, pB: number) => {
     if (!torneio) return;
+
     let novosConfrontos = torneio.chaveamento.map((c) => {
       if (c.id === matchId) {
         let vencedorId: string | undefined = undefined;
@@ -567,41 +618,47 @@ export default function TorneioDetails() {
       return c;
     });
 
-    // Se for formato de chaveamento eliminatório, verifica se a fase atual terminou para gerar a próxima fase!
+    // Se for formato de chaveamento eliminatório, propaga os vencedores para os confrontos já existentes das próximas fases!
     if (torneio.formato === 'chaveamento') {
       const matchAtual = novosConfrontos.find((m) => m.id === matchId);
       if (matchAtual && matchAtual.vencedorId) {
+        const timeVencedor = matchAtual.vencedorId === matchAtual.timeA.id ? matchAtual.timeA : matchAtual.timeB;
         const faseAtual = matchAtual.fase;
-        const confrontosDaFase = novosConfrontos.filter((m) => m.fase === faseAtual);
-        const todosFinalizados = confrontosDaFase.every((m) => m.vencedorId);
 
-        if (todosFinalizados) {
-          // Determina a próxima fase
-          let proximaFase = '';
-          if (faseAtual === 'Oitavas de Final') proximaFase = 'Quartas de Final';
-          else if (faseAtual === 'Quartas de Final') proximaFase = 'Semifinal';
-          else if (faseAtual === 'Semifinal') proximaFase = 'Final';
+        // Se for Semifinal e o vencedor foi definido, atualiza o time correspondente no jogo da Final
+        if (faseAtual === 'Semifinal') {
+          const semis = novosConfrontos.filter((m) => m.fase === 'Semifinal');
+          const indexSemi = semis.findIndex((m) => m.id === matchId);
+          const finalMatchIndex = novosConfrontos.findIndex((m) => m.fase === 'Final');
 
-          if (proximaFase) {
-            // Verifica se a próxima fase já existe
-            const jaExisteProxima = novosConfrontos.some((m) => m.fase === proximaFase);
-            if (!jaExisteProxima) {
-              const vencedores = confrontosDaFase.map((m) => {
-                return m.vencedorId === m.timeA.id ? m.timeA : m.timeB;
-              });
+          if (finalMatchIndex !== -1 && indexSemi !== -1) {
+            const finalMatch = { ...novosConfrontos[finalMatchIndex] };
+            if (indexSemi === 0) {
+              finalMatch.timeA = timeVencedor;
+            } else if (indexSemi === 1) {
+              finalMatch.timeB = timeVencedor;
+            }
+            novosConfrontos[finalMatchIndex] = finalMatch;
+          }
+        }
+        // Se for Quartas de Final, atualiza a Semifinal correspondente
+        else if (faseAtual === 'Quartas de Final') {
+          const quartas = novosConfrontos.filter((m) => m.fase === 'Quartas de Final');
+          const indexQuartas = quartas.findIndex((m) => m.id === matchId);
+          const semis = novosConfrontos.filter((m) => m.fase === 'Semifinal');
 
-              for (let i = 0; i < vencedores.length; i += 2) {
-                const timeA = vencedores[i];
-                const timeB = vencedores[i + 1] || { id: 'bye', nome: 'Aguardando' };
-                novosConfrontos.push({
-                  id: `match_${proximaFase.toLowerCase().replace(/\s+/g, '_')}_${i / 2}_${Date.now()}`,
-                  fase: proximaFase,
-                  rodada: Math.max(...novosConfrontos.map((m) => m.rodada || 1)) + 1,
-                  timeA,
-                  timeB,
-                  placarA: 0,
-                  placarB: 0,
-                });
+          if (indexQuartas !== -1) {
+            const targetSemiIndex = Math.floor(indexQuartas / 2);
+            const isTeamA = indexQuartas % 2 === 0;
+
+            if (semis[targetSemiIndex]) {
+              const targetSemiId = semis[targetSemiIndex].id;
+              const globalIndex = novosConfrontos.findIndex((m) => m.id === targetSemiId);
+              if (globalIndex !== -1) {
+                const updatedSemi = { ...novosConfrontos[globalIndex] };
+                if (isTeamA) updatedSemi.timeA = timeVencedor;
+                else updatedSemi.timeB = timeVencedor;
+                novosConfrontos[globalIndex] = updatedSemi;
               }
             }
           }
@@ -760,111 +817,115 @@ export default function TorneioDetails() {
         </div>
       </div>
 
-      {/* Card de Informações e Datas */}
-      <div className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-slate-600">
-            <Calendar size={14} className="text-red-500" />
-            <span className="font-bold">
-              {dayjs(torneio.data_inicio).format('DD/MM/YYYY')}
-              {torneio.data_fim ? ` até ${dayjs(torneio.data_fim).format('DD/MM/YYYY')}` : ''}
-            </span>
+      {/* Card de Informações e Datas (Exibido apenas na aba Times para manter a tela de Jogos 100% limpa) */}
+      {activeTab === 'times' && (
+        <>
+          <div className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <Calendar size={14} className="text-red-500" />
+                <span className="font-bold">
+                  {dayjs(torneio.data_inicio).format('DD/MM/YYYY')}
+                  {torneio.data_fim ? ` até ${dayjs(torneio.data_fim).format('DD/MM/YYYY')}` : ''}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Regras para exibição do botão de inscrição e aviso de Inscrições Encerradas */}
+                {(() => {
+                  const timesComIntegrantes = torneio.times.filter((t) => (t.jogadores?.length || 0) > 0).length;
+                  const isTorneioLotado = timesComIntegrantes >= torneio.quantidade_times;
+                  const isAdmin = currentUser && torneio.criador_id === currentUser.id;
+                  const meuTime = currentUser && torneio.times.find((t) => t.jogadores?.some((j) => j.id === currentUser.id));
+
+                  if (meuTime) {
+                    // O usuário já está em um time!
+                    return (
+                      <button
+                        onClick={() => {
+                          setTargetTeamId(meuTime.id);
+                          setNomeNovoTime(meuTime.nome);
+                          setJogadoresTimeFechado(meuTime.jogadores || []);
+                          setShowInscreverTimeModal(true);
+                        }}
+                        className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <UserCheck size={14} />
+                        <span>Meu Time ({meuTime.nome})</span>
+                      </button>
+                    );
+                  }
+
+                  if (isTorneioLotado) {
+                    // TORNEIO LOTADO: Mostra Badge de Inscrições Encerradas!
+                    return (
+                      <span className="px-3 py-1.5 bg-red-100 border border-red-200 text-red-700 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs">
+                        <Lock size={13} />
+                        <span>Inscrições Encerradas</span>
+                      </span>
+                    );
+                  }
+
+                  if (torneio.tipo_times === 'fechado') {
+                    return (
+                      <button
+                        onClick={() => {
+                          setTargetTeamId(null);
+                          setNomeNovoTime('');
+                          setJogadoresTimeFechado([]);
+                          setShowInscreverTimeModal(true);
+                        }}
+                        className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <UserPlus size={14} />
+                        <span>{isAdmin ? 'Inscrever Time' : 'Inscrever Meu Time'}</span>
+                      </button>
+                    );
+                  } else {
+                    return (
+                      <button
+                        onClick={handleParticiparIndividual}
+                        className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <UserPlus size={14} />
+                        <span>Quero Participar</span>
+                      </button>
+                    );
+                  }
+                })()}
+
+                <button
+                  onClick={() => setEditDateModal(true)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
+                  title="Alterar Datas"
+                >
+                  <Edit3 size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-600 pt-2 border-t border-slate-100">
+              <span>👥 {torneio.quantidade_times} Times ({torneio.jogadores_por_time || 2}x{torneio.jogadores_por_time || 2})</span>
+              <span>🎲 {torneio.tipo_times === 'sorteio' ? 'Por Sorteio' : 'Fechados'}</span>
+              <span>{torneio.publico ? '🌐 Público' : '🔒 Privado'}</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Regras para exibição do botão de inscrição e aviso de Inscrições Encerradas */}
-            {(() => {
-              const timesComIntegrantes = torneio.times.filter((t) => (t.jogadores?.length || 0) > 0).length;
-              const isTorneioLotado = timesComIntegrantes >= torneio.quantidade_times;
-              const isAdmin = currentUser && torneio.criador_id === currentUser.id;
-              const meuTime = currentUser && torneio.times.find((t) => t.jogadores?.some((j) => j.id === currentUser.id));
-
-              if (meuTime) {
-                // O usuário já está em um time!
-                return (
-                  <button
-                    onClick={() => {
-                      setTargetTeamId(meuTime.id);
-                      setNomeNovoTime(meuTime.nome);
-                      setJogadoresTimeFechado(meuTime.jogadores || []);
-                      setShowInscreverTimeModal(true);
-                    }}
-                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <UserCheck size={14} />
-                    <span>Meu Time ({meuTime.nome})</span>
-                  </button>
-                );
-              }
-
-              if (isTorneioLotado) {
-                // TORNEIO LOTADO: Mostra Badge de Inscrições Encerradas!
-                return (
-                  <span className="px-3 py-1.5 bg-red-100 border border-red-200 text-red-700 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs">
-                    <Lock size={13} />
-                    <span>Inscrições Encerradas</span>
-                  </span>
-                );
-              }
-
-              if (torneio.tipo_times === 'fechado') {
-                return (
-                  <button
-                    onClick={() => {
-                      setTargetTeamId(null);
-                      setNomeNovoTime('');
-                      setJogadoresTimeFechado([]);
-                      setShowInscreverTimeModal(true);
-                    }}
-                    className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <UserPlus size={14} />
-                    <span>{isAdmin ? 'Inscrever Time' : 'Inscrever Meu Time'}</span>
-                  </button>
-                );
-              } else {
-                return (
-                  <button
-                    onClick={handleParticiparIndividual}
-                    className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <UserPlus size={14} />
-                    <span>Quero Participar</span>
-                  </button>
-                );
-              }
-            })()}
-
-            <button
-              onClick={() => setEditDateModal(true)}
-              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
-              title="Alterar Datas"
-            >
-              <Edit3 size={14} />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between text-xs font-semibold text-slate-600 pt-2 border-t border-slate-100">
-          <span>👥 {torneio.quantidade_times} Times ({torneio.jogadores_por_time || 2}x{torneio.jogadores_por_time || 2})</span>
-          <span>🎲 {torneio.tipo_times === 'sorteio' ? 'Por Sorteio' : 'Fechados'}</span>
-          <span>{torneio.publico ? '🌐 Público' : '🔒 Privado'}</span>
-        </div>
-      </div>
-
-      {/* BANNER VISÍVEL DE INSCRIÇÕES ENCERRADAS */}
-      {torneio.times.filter((t) => (t.jogadores?.length || 0) > 0).length >= torneio.quantidade_times && (
-        <div className="bg-gradient-to-r from-amber-500/10 via-red-500/10 to-amber-500/10 border border-amber-300 rounded-2xl p-3.5 flex items-center gap-3 text-left shadow-sm">
-          <div className="p-2 rounded-xl bg-amber-500 text-white shrink-0 shadow-xs">
-            <Lock size={18} />
-          </div>
-          <div>
-            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Inscrições Encerradas! 🏆</h4>
-            <p className="text-[11px] font-semibold text-slate-600 leading-snug">
-              Todos os {torneio.quantidade_times} times já foram confirmados. O torneio está prestes a começar!
-            </p>
-          </div>
-        </div>
+          {/* BANNER VISÍVEL DE INSCRIÇÕES ENCERRADAS */}
+          {torneio.times.filter((t) => (t.jogadores?.length || 0) > 0).length >= torneio.quantidade_times && (
+            <div className="bg-gradient-to-r from-amber-500/10 via-red-500/10 to-amber-500/10 border border-amber-300 rounded-2xl p-3.5 flex items-center gap-3 text-left shadow-sm">
+              <div className="p-2 rounded-xl bg-amber-500 text-white shrink-0 shadow-xs">
+                <Lock size={18} />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Inscrições Encerradas! 🏆</h4>
+                <p className="text-[11px] font-semibold text-slate-600 leading-snug">
+                  Todos os {torneio.quantidade_times} times já foram confirmados. O torneio está prestes a começar!
+                </p>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* CONTEÚDO DA ABA SELECIONADA */}
@@ -1181,8 +1242,8 @@ export default function TorneioDetails() {
                             </div>
                           </div>
 
-                          {/* Botão de Iniciar Partida (Exclusivo para Admin) */}
-                          {isAdmin && (
+                          {/* Botão de Iniciar Partida (Apenas para Admin e enquanto a partida NÃO estiver encerrada) */}
+                          {isAdmin && !isFinalizado && !match.timeA.id.startsWith('pending') && !match.timeB.id.startsWith('pending') && (
                             <div className="pt-2 border-t border-slate-100 flex justify-end">
                               <button
                                 type="button"
@@ -1196,7 +1257,7 @@ export default function TorneioDetails() {
                                 className="w-full py-2 bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                               >
                                 <Play size={14} />
-                                <span>{isFinalizado ? 'Editar Partida' : 'Iniciar Partida'}</span>
+                                <span>Iniciar Partida</span>
                               </button>
                             </div>
                           )}
