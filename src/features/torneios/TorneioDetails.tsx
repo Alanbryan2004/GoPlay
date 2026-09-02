@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Torneio, TorneioConfronto } from '../../types/torneio';
-import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users, Link, Share2 } from 'lucide-react';
+import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users, Link, Share2, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import Dialog from '../../components/common/Dialog';
@@ -555,6 +555,22 @@ export default function TorneioDetails() {
 
   const handleCopiarLink = () => {
     if (!torneio) return;
+
+    // Checa se as vagas de times ou atletas já estão 100% preenchidas
+    const timesPreenchidos = torneio.times.filter((t) => (t.jogadores?.length || 0) > 0).length;
+    const isTorneioLotado = timesPreenchidos >= torneio.quantidade_times;
+
+    if (isTorneioLotado) {
+      setDialog({
+        isOpen: true,
+        title: 'Inscrições Encerradas! 🔒',
+        message: `As inscrições para o torneio "${torneio.nome}" foram encerradas pois a quantidade limite de ${torneio.quantidade_times} times já foi atingida! O torneio está prestes a começar.`,
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+      return;
+    }
+
     const shareUrl = window.location.href;
     const shareText = `🏆 Venha participar do torneio "${torneio.nome}" no GoPlay!\n\nAcesse o link para ver o chaveamento e se inscrever:\n${shareUrl}`;
 
@@ -686,63 +702,57 @@ export default function TorneioDetails() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Regras para exibição do botão de inscrição */}
+            {/* Regras para exibição do botão de inscrição e aviso de Inscrições Encerradas */}
             {(() => {
+              const timesComIntegrantes = torneio.times.filter((t) => (t.jogadores?.length || 0) > 0).length;
+              const isTorneioLotado = timesComIntegrantes >= torneio.quantidade_times;
               const isAdmin = currentUser && torneio.criador_id === currentUser.id;
               const meuTime = currentUser && torneio.times.find((t) => t.jogadores?.some((j) => j.id === currentUser.id));
 
+              if (meuTime) {
+                // O usuário já está em um time!
+                return (
+                  <button
+                    onClick={() => {
+                      setTargetTeamId(meuTime.id);
+                      setNomeNovoTime(meuTime.nome);
+                      setJogadoresTimeFechado(meuTime.jogadores || []);
+                      setShowInscreverTimeModal(true);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <UserCheck size={14} />
+                    <span>Meu Time ({meuTime.nome})</span>
+                  </button>
+                );
+              }
+
+              if (isTorneioLotado) {
+                // TORNEIO LOTADO: Mostra Badge de Inscrições Encerradas!
+                return (
+                  <span className="px-3 py-1.5 bg-red-100 border border-red-200 text-red-700 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs">
+                    <Lock size={13} />
+                    <span>Inscrições Encerradas</span>
+                  </span>
+                );
+              }
+
               if (torneio.tipo_times === 'fechado') {
-                if (meuTime) {
-                  // O usuário já está em um time!
-                  return (
-                    <button
-                      onClick={() => {
-                        setTargetTeamId(meuTime.id);
-                        setNomeNovoTime(meuTime.nome);
-                        setJogadoresTimeFechado(meuTime.jogadores || []);
-                        setShowInscreverTimeModal(true);
-                      }}
-                      className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <UserCheck size={14} />
-                      <span>Meu Time ({meuTime.nome})</span>
-                    </button>
-                  );
-                } else if (isAdmin) {
-                  // É o administrador que criou o torneio
-                  return (
-                    <button
-                      onClick={() => {
-                        setTargetTeamId(null);
-                        setNomeNovoTime('');
-                        setJogadoresTimeFechado([]);
-                        setShowInscreverTimeModal(true);
-                      }}
-                      className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <UserPlus size={14} />
-                      <span>Inscrever Time</span>
-                    </button>
-                  );
-                } else {
-                  // Usuário comum que ainda não está em nenhum time
-                  return (
-                    <button
-                      onClick={() => {
-                        setTargetTeamId(null);
-                        setNomeNovoTime('');
-                        setJogadoresTimeFechado([]);
-                        setShowInscreverTimeModal(true);
-                      }}
-                      className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <UserPlus size={14} />
-                      <span>Inscrever Meu Time</span>
-                    </button>
-                  );
-                }
+                return (
+                  <button
+                    onClick={() => {
+                      setTargetTeamId(null);
+                      setNomeNovoTime('');
+                      setJogadoresTimeFechado([]);
+                      setShowInscreverTimeModal(true);
+                    }}
+                    className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <UserPlus size={14} />
+                    <span>{isAdmin ? 'Inscrever Time' : 'Inscrever Meu Time'}</span>
+                  </button>
+                );
               } else {
-                // Sorteio individual
                 return (
                   <button
                     onClick={handleParticiparIndividual}
@@ -771,6 +781,21 @@ export default function TorneioDetails() {
           <span>{torneio.publico ? '🌐 Público' : '🔒 Privado'}</span>
         </div>
       </div>
+
+      {/* BANNER VISÍVEL DE INSCRIÇÕES ENCERRADAS */}
+      {torneio.times.filter((t) => (t.jogadores?.length || 0) > 0).length >= torneio.quantidade_times && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-red-500/10 to-amber-500/10 border border-amber-300 rounded-2xl p-3.5 flex items-center gap-3 text-left shadow-sm">
+          <div className="p-2 rounded-xl bg-amber-500 text-white shrink-0 shadow-xs">
+            <Lock size={18} />
+          </div>
+          <div>
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Inscrições Encerradas! 🏆</h4>
+            <p className="text-[11px] font-semibold text-slate-600 leading-snug">
+              Todos os {torneio.quantidade_times} times já foram confirmados. O torneio está prestes a começar!
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Card de Resumo dos Jogadores Inscritos (Compacto e Clicável para Visualização) */}
       <div
