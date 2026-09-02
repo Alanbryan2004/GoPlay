@@ -33,9 +33,16 @@ export default function TorneioDetails() {
     onConfirm: () => {},
   });
 
-  // Modal para Adicionar Jogadores aos Inscritos ou aos Times Fechados
+  // Modal para Inscrever Time Fechado completo (Nome do Time + Jogadores)
+  const [showInscreverTimeModal, setShowInscreverTimeModal] = useState(false);
+  const [nomeNovoTime, setNomeNovoTime] = useState('');
+  const [jogadoresTimeFechado, setJogadoresTimeFechado] = useState<{ id: string; nome: string }[]>([]);
+  const [buscaJogadorTime, setBuscaJogadorTime] = useState('');
+  const [sugestoesJogadorTime, setSugestoesJogadorTime] = useState<any[]>([]);
+
+  // Modal para Adicionar Jogadores aos Inscritos (Sorteio)
   const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [targetTeamId, setTargetTeamId] = useState<string | null>(null); // null = inscritos gerais, id = time específico
+  const [targetTeamId, setTargetTeamId] = useState<string | null>(null);
   const [todasPessoas, setTodasPessoas] = useState<any[]>([]);
   const [buscaAtleta, setBuscaAtleta] = useState('');
   const [sugestoesAtletas, setSugestoesAtletas] = useState<any[]>([]);
@@ -198,6 +205,149 @@ export default function TorneioDetails() {
     const updates = { times: novosTimes };
     setTorneio({ ...torneio, ...updates });
     await supabase.from('torneios').update(updates).eq('id', torneio.id);
+  };
+
+  // Salvar um Time Fechado completo (Nome + Elenco de Atletas)
+  const handleSalvarTimeFechado = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!torneio) return;
+
+    if (!nomeNovoTime.trim()) {
+      setDialog({
+        isOpen: true,
+        title: 'Nome Obrigatório',
+        message: 'Por favor, informe o nome do seu time.',
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+      return;
+    }
+
+    const minAtletas = torneio.jogadores_por_time || 2;
+    if (jogadoresTimeFechado.length < minAtletas) {
+      setDialog({
+        isOpen: true,
+        title: 'Mínimo de Jogadores',
+        message: `O time precisa ter no mínimo ${minAtletas} jogadores cadastrados (opção ${minAtletas}x${minAtletas}).`,
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+      return;
+    }
+
+    // Procura o primeiro slot de time vago ou atualiza o slot alvo
+    let timeSubstituido = false;
+    const novosTimes = torneio.times.map((t) => {
+      if (!timeSubstituido && (targetTeamId ? t.id === targetTeamId : (!t.jogadores || t.jogadores.length === 0))) {
+        timeSubstituido = true;
+        return {
+          ...t,
+          nome: nomeNovoTime.trim(),
+          jogadores: jogadoresTimeFechado,
+        };
+      }
+      return t;
+    });
+
+    if (!timeSubstituido) {
+      setDialog({
+        isOpen: true,
+        title: 'Torneio Lotado',
+        message: 'Todos os slots de times para este torneio já foram preenchidos!',
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+      return;
+    }
+
+    // Adiciona todos os atletas à lista geral de inscritos do torneio
+    const participantes = torneio.participantes || [];
+    const novosParticipantes = [...participantes];
+    jogadoresTimeFechado.forEach((j) => {
+      if (!novosParticipantes.some((p) => p.id === j.id)) {
+        const userObj = todasPessoas.find((u) => u.id === j.id);
+        novosParticipantes.push({ id: j.id, nome: j.nome, foto: userObj?.foto || '' });
+      }
+    });
+
+    const updates = { times: novosTimes, participantes: novosParticipantes };
+    setTorneio({ ...torneio, ...updates });
+    await supabase.from('torneios').update(updates).eq('id', torneio.id);
+
+    // Reseta formulário do modal
+    setNomeNovoTime('');
+    setJogadoresTimeFechado([]);
+    setBuscaJogadorTime('');
+    setSugestoesJogadorTime([]);
+    setShowInscreverTimeModal(false);
+
+    setDialog({
+      isOpen: true,
+      title: 'Time Cadastrado! 🎉',
+      message: `O time "${nomeNovoTime.trim()}" foi inscrito com sucesso no torneio com ${jogadoresTimeFechado.length} jogadores!`,
+      type: 'alert',
+      onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+    });
+  };
+
+  // Participar Individualmente (Quando for por Sorteio)
+  const handleParticiparIndividual = async () => {
+    if (!torneio) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setDialog({
+          isOpen: true,
+          title: 'Login Necessário',
+          message: 'Você precisa estar logado para se inscrever no torneio.',
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+        return;
+      }
+
+      const { data: profile } = await supabase.from('usuarios').select('id, nome, foto').eq('email', user.email).single();
+      const me = profile || { id: user.id, nome: user.user_metadata?.name || 'Jogador', foto: '' };
+
+      const participantes = torneio.participantes || [];
+      if (participantes.some((p) => p.id === me.id)) {
+        setDialog({
+          isOpen: true,
+          title: 'Já Inscrito',
+          message: 'Você já está inscrito neste torneio!',
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+        return;
+      }
+
+      const totalVagas = (torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2);
+      if (participantes.length >= totalVagas) {
+        setDialog({
+          isOpen: true,
+          title: 'Vagas Esgotadas',
+          message: 'Todas as vagas para este torneio já foram preenchidas.',
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+        return;
+      }
+
+      const novosParticipantes = [...participantes, { id: me.id, nome: me.nome, foto: me.foto || '' }];
+      const updates = { participantes: novosParticipantes };
+      setTorneio({ ...torneio, ...updates });
+      await supabase.from('torneios').update(updates).eq('id', torneio.id);
+
+      setDialog({
+        isOpen: true,
+        title: 'Inscrição Confirmada! 🎉',
+        message: 'Sua inscrição no torneio foi realizada com sucesso!',
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+    } catch (e: any) {
+      console.error(e);
+    }
   };
 
   // Algoritmo de Sorteio de Chaveamento / Pontos Corridos
@@ -475,13 +625,28 @@ export default function TorneioDetails() {
             </span>
           </div>
 
-          <button
-            onClick={() => setEditDateModal(true)}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
-            title="Alterar Datas"
-          >
-            <Edit3 size={14} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={torneio.tipo_times === 'fechado' ? () => {
+                setTargetTeamId(null);
+                setNomeNovoTime('');
+                setJogadoresTimeFechado([]);
+                setShowInscreverTimeModal(true);
+              } : handleParticiparIndividual}
+              className="px-3 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <UserPlus size={14} />
+              <span>{torneio.tipo_times === 'fechado' ? 'Inscrever Meu Time' : 'Quero Participar'}</span>
+            </button>
+
+            <button
+              onClick={() => setEditDateModal(true)}
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
+              title="Alterar Datas"
+            >
+              <Edit3 size={14} />
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center justify-between text-xs font-semibold text-slate-600 pt-2 border-t border-slate-100">
@@ -500,14 +665,19 @@ export default function TorneioDetails() {
           </h3>
 
           <button
-            onClick={() => {
+            onClick={torneio.tipo_times === 'fechado' ? () => {
+              setTargetTeamId(null);
+              setNomeNovoTime('');
+              setJogadoresTimeFechado([]);
+              setShowInscreverTimeModal(true);
+            } : () => {
               setTargetTeamId(null);
               setShowAddUserModal(true);
             }}
             className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95"
           >
             <Plus size={12} />
-            <span>Adicionar Atleta</span>
+            <span>{torneio.tipo_times === 'fechado' ? 'Cadastrar Time' : 'Adicionar Atleta'}</span>
           </button>
         </div>
 
@@ -537,7 +707,11 @@ export default function TorneioDetails() {
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-400 py-2">Nenhum jogador cadastrado ainda. Clique em "+ Adicionar Atleta" para inscrever os participantes.</p>
+          <p className="text-xs text-slate-400 py-2">
+            {torneio.tipo_times === 'fechado'
+              ? 'Nenhum time inscrito ainda. Clique em "Inscrever Meu Time" para cadastrar a equipe.'
+              : 'Nenhum jogador cadastrado ainda. Clique em "Quero Participar" ou em "+ Adicionar Atleta".'}
+          </p>
         )}
       </div>
 
@@ -546,7 +720,7 @@ export default function TorneioDetails() {
         <div className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-left">
           <h3 className="font-black text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
             <Users size={14} className="text-amber-500" />
-            Escalação dos Times Fechados ({torneio.jogadores_por_time || 2} atletas por time)
+            Times Confirmados ({torneio.jogadores_por_time || 2} atletas por time)
           </h3>
 
           <div className="grid grid-cols-2 gap-3">
@@ -581,12 +755,14 @@ export default function TorneioDetails() {
                       <button
                         onClick={() => {
                           setTargetTeamId(time.id);
-                          setShowAddUserModal(true);
+                          setNomeNovoTime(time.nome.startsWith('Time ') ? '' : time.nome);
+                          setJogadoresTimeFechado(time.jogadores || []);
+                          setShowInscreverTimeModal(true);
                         }}
                         className="w-full py-1.5 border border-dashed border-amber-300 rounded-lg text-left text-[10px] font-bold text-amber-700 hover:bg-amber-50 transition-all flex items-center justify-center gap-1 cursor-pointer"
                       >
                         <Plus size={10} />
-                        <span>Adicionar Atleta</span>
+                        <span>Inscrever Time</span>
                       </button>
                     )}
                   </div>
@@ -757,6 +933,144 @@ export default function TorneioDetails() {
                   <span>Salvar</span>
                 </button>
               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal para Inscrever Time Fechado completo (Nome do Time + Jogadores) */}
+      <AnimatePresence>
+        {showInscreverTimeModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <div className="bg-white p-5 rounded-2xl w-full max-w-sm space-y-4 shadow-2xl text-left max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                  <Users className="text-amber-500" size={18} />
+                  Inscrever Time Fechado
+                </h3>
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                  Mín. {torneio?.jogadores_por_time || 2} atletas
+                </span>
+              </div>
+
+              <form onSubmit={handleSalvarTimeFechado} className="space-y-4">
+                {/* Nome do Time */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
+                    Nome do Seu Time *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={nomeNovoTime}
+                    onChange={(e) => setNomeNovoTime(e.target.value)}
+                    placeholder="Ex: Garden Club FC, Vôlei Arte..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Escalação de Jogadores */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
+                      Integrantes do Time ({jogadoresTimeFechado.length}/{torneio?.jogadores_por_time || 2})
+                    </label>
+                    <span className="text-[10px] font-bold text-slate-400">Pode incluir reservas</span>
+                  </div>
+
+                  {/* Lista de Atletas Adicionados ao Time */}
+                  {jogadoresTimeFechado.length > 0 && (
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto p-1 border border-slate-100 rounded-xl">
+                      {jogadoresTimeFechado.map((j) => (
+                        <div key={j.id} className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center text-xs font-bold text-slate-800">
+                          <span className="truncate">👤 {j.nome}</span>
+                          <button
+                            type="button"
+                            onClick={() => setJogadoresTimeFechado(jogadoresTimeFechado.filter((x) => x.id !== j.id))}
+                            className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Autocomplete de busca de atletas */}
+                  <div className="space-y-1 relative">
+                    <input
+                      type="text"
+                      value={buscaJogadorTime}
+                      onChange={(e) => {
+                        const txt = e.target.value;
+                        setBuscaJogadorTime(txt);
+                        if (!txt.trim()) {
+                          setSugestoesJogadorTime([]);
+                          return;
+                        }
+                        const filtrados = todasPessoas.filter((p) =>
+                          p.nome.toLowerCase().includes(txt.toLowerCase()) ||
+                          p.email?.toLowerCase().includes(txt.toLowerCase())
+                        );
+                        setSugestoesJogadorTime(filtrados.slice(0, 5));
+                      }}
+                      placeholder="Adicionar jogador pelo nome..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+
+                    {sugestoesJogadorTime.length > 0 && (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-lg bg-white divide-y divide-slate-100 max-h-36 overflow-y-auto z-50 relative">
+                        {sugestoesJogadorTime.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              if (!jogadoresTimeFechado.some((j) => j.id === p.id)) {
+                                setJogadoresTimeFechado([...jogadoresTimeFechado, { id: p.id, nome: p.nome }]);
+                              }
+                              setBuscaJogadorTime('');
+                              setSugestoesJogadorTime([]);
+                            }}
+                            className="w-full p-2.5 text-left text-xs font-bold text-slate-800 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer"
+                          >
+                            {p.foto ? (
+                              <img src={p.foto} alt={p.nome} className="w-5 h-5 rounded-full object-cover shrink-0" />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[9px] shrink-0">
+                                {p.nome.charAt(0)}
+                              </div>
+                            )}
+                            <span className="truncate">{p.nome}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Botões de Ação */}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowInscreverTimeModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-amber-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow-md transition-all active:scale-95 flex items-center justify-center gap-1"
+                  >
+                    <Save size={14} />
+                    <span>Confirmar Time</span>
+                  </button>
+                </div>
+              </form>
             </div>
           </motion.div>
         )}
