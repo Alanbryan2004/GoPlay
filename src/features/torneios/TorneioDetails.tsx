@@ -92,9 +92,43 @@ export default function TorneioDetails() {
         .single();
 
       if (!error && data) {
-        setTorneio(data as Torneio);
-        setEditInicio(data.data_inicio || '');
-        setEditFim(data.data_fim || '');
+        let t = data as Torneio;
+
+        // Auto-repara torneios onde as Semifinais já acabaram mas a partida da Final ainda não foi criada no banco
+        if (t.formato === 'chaveamento' && t.chaveamento && t.chaveamento.length > 0) {
+          const semis = t.chaveamento.filter((m) => m.fase === 'Semifinal');
+          const temFinal = t.chaveamento.some((m) => m.fase === 'Final');
+
+          if (!temFinal && semis.length >= 2 && semis.every((m) => m.vencedorId || (m.placarA || 0) > 0 || (m.placarB || 0) > 0)) {
+            const getVencedor = (m: TorneioConfronto) => {
+              if (m.vencedorId) return m.vencedorId === m.timeA.id ? m.timeA : m.timeB;
+              if ((m.placarA || 0) > (m.placarB || 0)) return m.timeA;
+              if ((m.placarB || 0) > (m.placarA || 0)) return m.timeB;
+              return m.timeA;
+            };
+
+            const timeA = getVencedor(semis[0]);
+            const timeB = getVencedor(semis[1]);
+
+            const finalMatch: TorneioConfronto = {
+              id: `match_final_0_${Date.now()}`,
+              fase: 'Final',
+              rodada: 2,
+              timeA,
+              timeB,
+              placarA: 0,
+              placarB: 0,
+            };
+
+            const novoChaveamento = [...t.chaveamento, finalMatch];
+            t = { ...t, chaveamento: novoChaveamento };
+            await supabase.from('torneios').update({ chaveamento: novoChaveamento }).eq('id', t.id);
+          }
+        }
+
+        setTorneio(t);
+        setEditInicio(t.data_inicio || '');
+        setEditFim(t.data_fim || '');
       }
     } catch (e) {
       console.error(e);
