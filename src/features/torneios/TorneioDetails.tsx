@@ -633,12 +633,33 @@ export default function TorneioDetails() {
 
                 <div className="grid grid-cols-5 items-center gap-2">
                   {/* Time A */}
-                  <div className={`col-span-2 p-2.5 rounded-xl border text-center font-bold text-xs ${match.vencedorId === match.timeA.id ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black' : 'bg-slate-50 border-slate-200 text-slate-800'}`}>
-                    <span className="block truncate">{match.timeA.nome}</span>
+                  <div
+                    onClick={() => {
+                      if (match.timeA.jogadores && match.timeA.jogadores.length > 0) {
+                        const nomes = match.timeA.jogadores.map((j) => `• ${j.nome}`).join('\n');
+                        setDialog({
+                          isOpen: true,
+                          title: match.timeA.nome,
+                          message: `Integrantes do time:\n\n${nomes}`,
+                          type: 'alert',
+                          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+                        });
+                      }
+                    }}
+                    className={`col-span-2 p-2.5 rounded-xl border text-center font-bold text-xs cursor-pointer transition-all ${
+                      match.vencedorId === match.timeA.id
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
+                        : match.timeA.jogadores && match.timeA.jogadores.length > 0
+                        ? 'bg-amber-50/70 border-amber-300 text-amber-950'
+                        : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <span className="block truncate font-extrabold">{match.timeA.nome}</span>
                     <input
                       type="number"
                       min={0}
                       value={match.placarA || 0}
+                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => handleAtualizarPlacar(match.id, parseInt(e.target.value) || 0, match.placarB || 0)}
                       className="w-12 text-center mt-1 bg-white border border-slate-300 rounded-lg py-0.5 font-black text-sm"
                     />
@@ -649,12 +670,33 @@ export default function TorneioDetails() {
                   </div>
 
                   {/* Time B */}
-                  <div className={`col-span-2 p-2.5 rounded-xl border text-center font-bold text-xs ${match.vencedorId === match.timeB.id ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black' : 'bg-slate-50 border-slate-200 text-slate-800'}`}>
-                    <span className="block truncate">{match.timeB.nome}</span>
+                  <div
+                    onClick={() => {
+                      if (match.timeB.jogadores && match.timeB.jogadores.length > 0) {
+                        const nomes = match.timeB.jogadores.map((j) => `• ${j.nome}`).join('\n');
+                        setDialog({
+                          isOpen: true,
+                          title: match.timeB.nome,
+                          message: `Integrantes do time:\n\n${nomes}`,
+                          type: 'alert',
+                          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+                        });
+                      }
+                    }}
+                    className={`col-span-2 p-2.5 rounded-xl border text-center font-bold text-xs cursor-pointer transition-all ${
+                      match.vencedorId === match.timeB.id
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
+                        : match.timeB.jogadores && match.timeB.jogadores.length > 0
+                        ? 'bg-amber-50/70 border-amber-300 text-amber-950'
+                        : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <span className="block truncate font-extrabold">{match.timeB.nome}</span>
                     <input
                       type="number"
                       min={0}
                       value={match.placarB || 0}
+                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => handleAtualizarPlacar(match.id, match.placarA || 0, parseInt(e.target.value) || 0)}
                       className="w-12 text-center mt-1 bg-white border border-slate-300 rounded-lg py-0.5 font-black text-sm"
                     />

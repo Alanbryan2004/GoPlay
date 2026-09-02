@@ -107,11 +107,37 @@ export default function NovoTorneio() {
         status: 'rascunho',
       };
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('torneios')
         .insert(novoTorneio)
         .select('id')
         .single();
+
+      // Fallback para bancos que ainda não rodaram as novas colunas
+      if (error && error.message?.includes('column')) {
+        const fallbackTorneio = {
+          criador_id: creatorId,
+          nome: nome.trim(),
+          modalidade_id: modalidadeId || null,
+          grupo_id: grupoId || null,
+          formato,
+          publico,
+          quantidade_times: quantidadeTimes,
+          tipo_times: tipoTimes,
+          data_inicio: dataInicio,
+          data_fim: dataFim || null,
+          times: initialTimes,
+          chaveamento: [],
+          status: 'rascunho',
+        };
+        const resFallback = await supabase
+          .from('torneios')
+          .insert(fallbackTorneio)
+          .select('id')
+          .single();
+        data = resFallback.data;
+        error = resFallback.error;
+      }
 
       if (error) {
         alert('Erro ao criar torneio: ' + error.message);
