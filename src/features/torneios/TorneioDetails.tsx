@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Torneio, TorneioConfronto } from '../../types/torneio';
-import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users, Link, Share2, Lock } from 'lucide-react';
+import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users, Link, Share2, Lock, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import Dialog from '../../components/common/Dialog';
@@ -37,6 +37,11 @@ export default function TorneioDetails() {
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [showParticipantesModal, setShowParticipantesModal] = useState(false);
+  const [activeMatch, setActiveMatch] = useState<{
+    match: TorneioConfronto;
+    placarA: number;
+    placarB: number;
+  } | null>(null);
 
   // Modal para Inscrever Time Fechado completo (Nome do Time + Jogadores)
   const [showInscreverTimeModal, setShowInscreverTimeModal] = useState(false);
@@ -414,6 +419,17 @@ export default function TorneioDetails() {
   const handleSortearChaveamento = async () => {
     if (!torneio) return;
 
+    if (torneio.chaveamento && torneio.chaveamento.length > 0) {
+      setDialog({
+        isOpen: true,
+        title: 'Sorteio Já Realizado',
+        message: 'O chaveamento deste torneio já foi sorteado e não pode ser refeito.',
+        type: 'alert',
+        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+      return;
+    }
+
     const totalTimes = torneio.quantidade_times || 4;
     const porTime = torneio.jogadores_por_time || 2;
     const minJogadoresNecessarios = totalTimes * porTime;
@@ -677,16 +693,26 @@ export default function TorneioDetails() {
             <Trash2 size={15} />
           </button>
 
-          {/* Botão de Sortear Chaveamento */}
-          <button
-            onClick={handleSortearChaveamento}
-            disabled={sorteando}
-            className="p-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 text-xs font-black cursor-pointer"
-            title="Realizar Sorteio do Chaveamento"
-          >
-            <Shuffle size={14} />
-            <span>Sortear</span>
-          </button>
+          {/* Botão de Sortear Chaveamento (Desabilitado se o sorteio já tiver sido realizado) */}
+          {torneio.chaveamento.length === 0 ? (
+            <button
+              onClick={handleSortearChaveamento}
+              disabled={sorteando}
+              className="p-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 text-xs font-black cursor-pointer"
+              title="Realizar Sorteio do Chaveamento"
+            >
+              <Shuffle size={14} />
+              <span>Sortear</span>
+            </button>
+          ) : (
+            <span
+              className="p-2.5 bg-slate-100 text-slate-400 rounded-xl border border-slate-200 flex items-center gap-1 text-xs font-black opacity-75 cursor-not-allowed"
+              title="Sorteio já realizado"
+            >
+              <CheckCircle2 size={14} className="text-emerald-500" />
+              <span>Sorteado</span>
+            </span>
+          )}
         </div>
       </div>
 
@@ -1008,89 +1034,104 @@ export default function TorneioDetails() {
           </h2>
 
           <div className="space-y-3">
-            {torneio.chaveamento.map((match) => (
-              <div
-                key={match.id}
-                className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3"
-              >
-                <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
-                  <span>{match.fase}</span>
-                  <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Partida Ativa</span>
+            {torneio.chaveamento.map((match) => {
+              const isAdmin = currentUser && torneio.criador_id === currentUser.id;
+              const isFinalizado = (match.placarA || 0) > 0 || (match.placarB || 0) > 0 || match.vencedorId;
+
+              return (
+                <div
+                  key={match.id}
+                  className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3"
+                >
+                  <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
+                    <span>{match.fase}</span>
+                    {isFinalizado ? (
+                      <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Partida Encerrada</span>
+                    ) : (
+                      <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">Partida Ativa</span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-5 items-center gap-2">
+                    {/* Time A */}
+                    <div
+                      onClick={() => {
+                        if (match.timeA.jogadores && match.timeA.jogadores.length > 0) {
+                          const nomes = match.timeA.jogadores.map((j) => `• ${j.nome}`).join('\n');
+                          setDialog({
+                            isOpen: true,
+                            title: match.timeA.nome,
+                            message: `Integrantes do time:\n\n${nomes}`,
+                            type: 'alert',
+                            onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+                          });
+                        }
+                      }}
+                      className={`col-span-2 p-3 rounded-2xl border text-center font-bold text-xs cursor-pointer transition-all ${
+                        match.vencedorId === match.timeA.id
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
+                          : 'bg-amber-50/70 border-amber-300 text-amber-950'
+                      }`}
+                    >
+                      <span className="block truncate font-extrabold text-sm">{match.timeA.nome}</span>
+                      <span className="inline-block mt-1 text-base font-black px-3 py-0.5 bg-white/90 rounded-lg border border-slate-200">
+                        {match.placarA || 0}
+                      </span>
+                    </div>
+
+                    <div className="col-span-1 text-center font-black text-slate-400 text-base">
+                      X
+                    </div>
+
+                    {/* Time B */}
+                    <div
+                      onClick={() => {
+                        if (match.timeB.jogadores && match.timeB.jogadores.length > 0) {
+                          const nomes = match.timeB.jogadores.map((j) => `• ${j.nome}`).join('\n');
+                          setDialog({
+                            isOpen: true,
+                            title: match.timeB.nome,
+                            message: `Integrantes do time:\n\n${nomes}`,
+                            type: 'alert',
+                            onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+                          });
+                        }
+                      }}
+                      className={`col-span-2 p-3 rounded-2xl border text-center font-bold text-xs cursor-pointer transition-all ${
+                        match.vencedorId === match.timeB.id
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
+                          : 'bg-amber-50/70 border-amber-300 text-amber-950'
+                      }`}
+                    >
+                      <span className="block truncate font-extrabold text-sm">{match.timeB.nome}</span>
+                      <span className="inline-block mt-1 text-base font-black px-3 py-0.5 bg-white/90 rounded-lg border border-slate-200">
+                        {match.placarB || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Botão de Iniciar Partida (Exclusivo para Admin) */}
+                  {isAdmin && (
+                    <div className="pt-2 border-t border-slate-100 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveMatch({
+                            match,
+                            placarA: match.placarA || 0,
+                            placarB: match.placarB || 0,
+                          });
+                        }}
+                        className="w-full py-2 bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Play size={14} />
+                        <span>{isFinalizado ? 'Editar Partida' : 'Iniciar Partida'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-
-                <div className="grid grid-cols-5 items-center gap-2">
-                  {/* Time A */}
-                  <div
-                    onClick={() => {
-                      if (match.timeA.jogadores && match.timeA.jogadores.length > 0) {
-                        const nomes = match.timeA.jogadores.map((j) => `• ${j.nome}`).join('\n');
-                        setDialog({
-                          isOpen: true,
-                          title: match.timeA.nome,
-                          message: `Integrantes do time:\n\n${nomes}`,
-                          type: 'alert',
-                          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
-                        });
-                      }
-                    }}
-                    className={`col-span-2 p-2.5 rounded-xl border text-center font-bold text-xs cursor-pointer transition-all ${
-                      match.vencedorId === match.timeA.id
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
-                        : match.timeA.jogadores && match.timeA.jogadores.length > 0
-                        ? 'bg-amber-50/70 border-amber-300 text-amber-950'
-                        : 'bg-slate-50 border-slate-200 text-slate-800'
-                    }`}
-                  >
-                    <span className="block truncate font-extrabold">{match.timeA.nome}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.placarA || 0}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => handleAtualizarPlacar(match.id, parseInt(e.target.value) || 0, match.placarB || 0)}
-                      className="w-12 text-center mt-1 bg-white border border-slate-300 rounded-lg py-0.5 font-black text-sm"
-                    />
-                  </div>
-
-                  <div className="col-span-1 text-center font-black text-slate-400 text-sm">
-                    X
-                  </div>
-
-                  {/* Time B */}
-                  <div
-                    onClick={() => {
-                      if (match.timeB.jogadores && match.timeB.jogadores.length > 0) {
-                        const nomes = match.timeB.jogadores.map((j) => `• ${j.nome}`).join('\n');
-                        setDialog({
-                          isOpen: true,
-                          title: match.timeB.nome,
-                          message: `Integrantes do time:\n\n${nomes}`,
-                          type: 'alert',
-                          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
-                        });
-                      }
-                    }}
-                    className={`col-span-2 p-2.5 rounded-xl border text-center font-bold text-xs cursor-pointer transition-all ${
-                      match.vencedorId === match.timeB.id
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
-                        : match.timeB.jogadores && match.timeB.jogadores.length > 0
-                        ? 'bg-amber-50/70 border-amber-300 text-amber-950'
-                        : 'bg-slate-50 border-slate-200 text-slate-800'
-                    }`}
-                  >
-                    <span className="block truncate font-extrabold">{match.timeB.nome}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.placarB || 0}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => handleAtualizarPlacar(match.id, match.placarA || 0, parseInt(e.target.value) || 0)}
-                      className="w-12 text-center mt-1 bg-white border border-slate-300 rounded-lg py-0.5 font-black text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -1469,6 +1510,138 @@ export default function TorneioDetails() {
                   className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
                 >
                   Fechar
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL DE PARTIDA ATIVA (Painel de Placar Sem Exclusão/Reequilibrio) */}
+      <AnimatePresence>
+        {activeMatch && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <div className="bg-white p-5 rounded-3xl w-full max-w-sm space-y-5 shadow-2xl text-left max-h-[90vh] overflow-y-auto border border-slate-100">
+              {/* Header da Partida */}
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                    {activeMatch.match.fase} • Partida Ativa
+                  </span>
+                  <h3 className="font-black text-slate-900 text-base mt-1">Confronto Direto</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveMatch(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Placar Interativo */}
+              <div className="grid grid-cols-2 gap-4 text-center">
+                {/* Time A */}
+                <div className="p-4 rounded-2xl bg-red-50/60 border border-red-200 space-y-2">
+                  <span className="block font-black text-xs text-red-700 uppercase tracking-wider truncate">
+                    {activeMatch.match.timeA.nome}
+                  </span>
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveMatch({ ...activeMatch, placarA: Math.max(0, activeMatch.placarA - 1) })}
+                      className="w-8 h-8 rounded-full bg-white border border-red-200 text-red-600 font-black text-base shadow-xs active:scale-90 transition-all cursor-pointer flex items-center justify-center"
+                    >
+                      -
+                    </button>
+                    <span className="text-3xl font-black text-slate-900 w-10">
+                      {activeMatch.placarA}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveMatch({ ...activeMatch, placarA: activeMatch.placarA + 1 })}
+                      className="w-8 h-8 rounded-full bg-red-500 text-white font-black text-base shadow-md active:scale-90 transition-all cursor-pointer flex items-center justify-center"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Time B */}
+                <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200 space-y-2">
+                  <span className="block font-black text-xs text-blue-700 uppercase tracking-wider truncate">
+                    {activeMatch.match.timeB.nome}
+                  </span>
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveMatch({ ...activeMatch, placarB: Math.max(0, activeMatch.placarB - 1) })}
+                      className="w-8 h-8 rounded-full bg-white border border-blue-200 text-blue-600 font-black text-base shadow-xs active:scale-90 transition-all cursor-pointer flex items-center justify-center"
+                    >
+                      -
+                    </button>
+                    <span className="text-3xl font-black text-slate-900 w-10">
+                      {activeMatch.placarB}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveMatch({ ...activeMatch, placarB: activeMatch.placarB + 1 })}
+                      className="w-8 h-8 rounded-full bg-blue-500 text-white font-black text-base shadow-md active:scale-90 transition-all cursor-pointer flex items-center justify-center"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Elenco dos dois Times (Somente Leitura - Sem Lixeiras nem Reequilíbrio) */}
+              <div className="grid grid-cols-2 gap-3 text-left">
+                {/* Atletas Time A */}
+                <div className="p-3 rounded-2xl bg-red-50/40 border border-red-100 space-y-1.5">
+                  <span className="text-[10px] font-black text-red-600 uppercase tracking-wider block">
+                    Escalação {activeMatch.match.timeA.nome}
+                  </span>
+                  <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                    {(activeMatch.match.timeA.jogadores || []).map((j) => (
+                      <div key={j.id} className="text-xs font-bold text-slate-800 bg-white p-1.5 rounded-lg border border-red-100 truncate">
+                        👤 {j.nome}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Atletas Time B */}
+                <div className="p-3 rounded-2xl bg-blue-50/40 border border-blue-100 space-y-1.5">
+                  <span className="text-[10px] font-black text-blue-600 uppercase tracking-wider block">
+                    Escalação {activeMatch.match.timeB.nome}
+                  </span>
+                  <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                    {(activeMatch.match.timeB.jogadores || []).map((j) => (
+                      <div key={j.id} className="text-xs font-bold text-slate-800 bg-white p-1.5 rounded-lg border border-blue-100 truncate">
+                        👤 {j.nome}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Botão Finalizar Partida */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleAtualizarPlacar(activeMatch.match.id, activeMatch.placarA, activeMatch.placarB);
+                    setActiveMatch(null);
+                  }}
+                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-2xl font-black text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle2 size={16} />
+                  <span>Finalizar Partida e Salvar Placar</span>
                 </button>
               </div>
             </div>
