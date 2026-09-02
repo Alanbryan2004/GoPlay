@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Torneio, TorneioConfronto } from '../../types/torneio';
-import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users, Link, Share2, Lock, Play } from 'lucide-react';
+import { Trophy, ArrowLeft, Shuffle, Calendar, GitMerge, Award, CheckCircle2, Clock, Edit3, Save, Trash2, UserPlus, UserCheck, Plus, UserMinus, Users, Link, Share2, Lock, Play, BarChart2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import Dialog from '../../components/common/Dialog';
@@ -37,6 +37,8 @@ export default function TorneioDetails() {
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [showParticipantesModal, setShowParticipantesModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'times' | 'jogos' | 'classificacao'>('jogos');
+  const [activePhaseTab, setActivePhaseTab] = useState<string>('Todas');
   const [activeMatch, setActiveMatch] = useState<{
     match: TorneioConfronto;
     placarA: number;
@@ -555,7 +557,7 @@ export default function TorneioDetails() {
 
   const handleAtualizarPlacar = async (matchId: string, pA: number, pB: number) => {
     if (!torneio) return;
-    const novosConfrontos = torneio.chaveamento.map((c) => {
+    let novosConfrontos = torneio.chaveamento.map((c) => {
       if (c.id === matchId) {
         let vencedorId: string | undefined = undefined;
         if (pA > pB) vencedorId = c.timeA.id;
@@ -564,6 +566,48 @@ export default function TorneioDetails() {
       }
       return c;
     });
+
+    // Se for formato de chaveamento eliminatório, verifica se a fase atual terminou para gerar a próxima fase!
+    if (torneio.formato === 'chaveamento') {
+      const matchAtual = novosConfrontos.find((m) => m.id === matchId);
+      if (matchAtual && matchAtual.vencedorId) {
+        const faseAtual = matchAtual.fase;
+        const confrontosDaFase = novosConfrontos.filter((m) => m.fase === faseAtual);
+        const todosFinalizados = confrontosDaFase.every((m) => m.vencedorId);
+
+        if (todosFinalizados) {
+          // Determina a próxima fase
+          let proximaFase = '';
+          if (faseAtual === 'Oitavas de Final') proximaFase = 'Quartas de Final';
+          else if (faseAtual === 'Quartas de Final') proximaFase = 'Semifinal';
+          else if (faseAtual === 'Semifinal') proximaFase = 'Final';
+
+          if (proximaFase) {
+            // Verifica se a próxima fase já existe
+            const jaExisteProxima = novosConfrontos.some((m) => m.fase === proximaFase);
+            if (!jaExisteProxima) {
+              const vencedores = confrontosDaFase.map((m) => {
+                return m.vencedorId === m.timeA.id ? m.timeA : m.timeB;
+              });
+
+              for (let i = 0; i < vencedores.length; i += 2) {
+                const timeA = vencedores[i];
+                const timeB = vencedores[i + 1] || { id: 'bye', nome: 'Aguardando' };
+                novosConfrontos.push({
+                  id: `match_${proximaFase.toLowerCase().replace(/\s+/g, '_')}_${i / 2}_${Date.now()}`,
+                  fase: proximaFase,
+                  rodada: Math.max(...novosConfrontos.map((m) => m.rodada || 1)) + 1,
+                  timeA,
+                  timeB,
+                  placarA: 0,
+                  placarB: 0,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
 
     setTorneio({ ...torneio, chaveamento: novosConfrontos });
     await supabase.from('torneios').update({ chaveamento: novosConfrontos }).eq('id', torneio.id);
@@ -823,318 +867,476 @@ export default function TorneioDetails() {
         </div>
       )}
 
-      {/* Card de Resumo dos Jogadores Inscritos (Compacto e Clicável para Visualização) */}
-      <div
-        onClick={() => {
-          if (torneio.participantes && torneio.participantes.length > 0) {
-            setShowParticipantesModal(true);
-          }
-        }}
-        className={`glass p-4 rounded-2xl border border-slate-200 shadow-sm transition-all text-left ${
-          torneio.participantes && torneio.participantes.length > 0 ? 'cursor-pointer hover:border-emerald-300 hover:shadow-md' : ''
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <UserCheck size={16} className="text-emerald-500" />
-            <div>
-              <h3 className="font-black text-xs uppercase tracking-wider text-slate-800">
-                Jogadores Inscritos
-              </h3>
-              <p className="text-[10px] text-slate-500 font-medium">
-                {torneio.participantes?.length || 0} de {(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)} atletas confirmados
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
-              {torneio.participantes?.length || 0}/{(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)}
-            </span>
-
-            {/* Apenas no modo sorteio individual exibe o botão de adicionar atleta */}
-            {torneio.tipo_times === 'sorteio' && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setTargetTeamId(null);
-                  setShowAddUserModal(true);
-                }}
-                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95"
-              >
-                <Plus size={12} />
-                <span>Adicionar</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* SE FOR TIMES FECHADOS: Painel de Escalação de Cada Time */}
-      {torneio.tipo_times === 'fechado' && (
-        <div className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-left">
-          <h3 className="font-black text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-            <Users size={14} className="text-amber-500" />
-            Times Confirmados ({torneio.jogadores_por_time || 2} atletas por time)
-          </h3>
-
-          <div className="grid grid-cols-2 gap-3">
-            {torneio.times.map((time, idx) => {
-              const jogadoresCount = time.jogadores?.length || 0;
-              const maxJogadores = torneio.jogadores_por_time || 2;
-              const isCompleto = jogadoresCount >= maxJogadores;
-              const isExpanded = expandedTeamId === time.id;
-              const temJogadores = (time.jogadores?.length || 0) > 0;
-              
-              const isAdmin = currentUser && torneio.criador_id === currentUser.id;
-              // Somente quem incluiu o time (Capitão) ou o Admin do Torneio pode editar/excluir o time
-              const isCriadorDoTime = currentUser && time.criador_id && time.criador_id === currentUser.id;
-              const podeGerenciarTime = isAdmin || isCriadorDoTime;
-
-              // Paleta de cores distintas para os cards dos times
-              const cardColors = [
-                { bg: 'bg-amber-500/10', border: 'border-amber-300', text: 'text-amber-950', badge: 'bg-amber-100 text-amber-900' },
-                { bg: 'bg-blue-500/10', border: 'border-blue-300', text: 'text-blue-950', badge: 'bg-blue-100 text-blue-900' },
-                { bg: 'bg-emerald-500/10', border: 'border-emerald-300', text: 'text-emerald-950', badge: 'bg-emerald-100 text-emerald-900' },
-                { bg: 'bg-purple-500/10', border: 'border-purple-300', text: 'text-purple-950', badge: 'bg-purple-100 text-purple-900' },
-                { bg: 'bg-rose-500/10', border: 'border-rose-300', text: 'text-rose-950', badge: 'bg-rose-100 text-rose-900' },
-                { bg: 'bg-cyan-500/10', border: 'border-cyan-300', text: 'text-cyan-950', badge: 'bg-cyan-100 text-cyan-900' },
-                { bg: 'bg-orange-500/10', border: 'border-orange-300', text: 'text-orange-950', badge: 'bg-orange-100 text-orange-900' },
-                { bg: 'bg-indigo-500/10', border: 'border-indigo-300', text: 'text-indigo-950', badge: 'bg-indigo-100 text-indigo-900' },
-              ];
-
-              const currentColor = cardColors[idx % cardColors.length];
-
-              return (
-                <div
-                  key={time.id}
-                  onClick={() => {
-                    if (temJogadores) {
-                      setExpandedTeamId(isExpanded ? null : time.id);
-                    }
-                  }}
-                  className={`p-3 rounded-2xl border transition-all cursor-pointer space-y-2 ${
-                    temJogadores
-                      ? `${currentColor.bg} ${currentColor.border} ${isExpanded ? 'shadow-md ring-2 ring-amber-400/30' : 'hover:opacity-90'}`
-                      : 'bg-slate-50/50 border-dashed border-slate-200'
-                  }`}
-                >
-                  <div className="flex justify-between items-center pb-1 border-b border-slate-200/80">
-                    <span className="font-black text-xs text-slate-900 truncate">{time.nome}</span>
-                    <span
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
-                        isCompleto ? 'bg-emerald-200/80 text-emerald-950' : currentColor.badge
-                      }`}
-                    >
-                      {jogadoresCount}/{maxJogadores}
-                    </span>
+      {/* CONTEÚDO DA ABA SELECIONADA */}
+      <div className="pb-16">
+        {/* 1. ABA: TIMES (Times Confirmados e Escalação) */}
+        {activeTab === 'times' && (
+          <div className="space-y-4">
+            {/* Card de Resumo dos Jogadores Inscritos (Compacto) */}
+            <div
+              onClick={() => {
+                if (torneio.participantes && torneio.participantes.length > 0) {
+                  setShowParticipantesModal(true);
+                }
+              }}
+              className={`glass p-4 rounded-2xl border border-slate-200 shadow-sm transition-all text-left ${
+                torneio.participantes && torneio.participantes.length > 0 ? 'cursor-pointer hover:border-emerald-300 hover:shadow-md' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <UserCheck size={16} className="text-emerald-500" />
+                  <div>
+                    <h3 className="font-black text-xs uppercase tracking-wider text-slate-800">
+                      Jogadores Inscritos
+                    </h3>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      {torneio.participantes?.length || 0} de {(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)} atletas confirmados
+                    </p>
                   </div>
+                </div>
 
-                  {/* Se tiver jogadores: exibe retraído ou expandido ao clicar */}
-                  {temJogadores ? (
-                    <div className="space-y-1.5 pt-1">
-                      {isExpanded ? (
-                        <div className="space-y-1">
-                          {(time.jogadores || []).map((j) => (
-                            <div
-                              key={j.id}
-                              className="flex justify-between items-center text-xs font-semibold text-slate-800 bg-white/90 p-1.5 rounded-lg border border-slate-200/60 shadow-2xs"
-                            >
-                              <span className="truncate">👤 {j.nome}</span>
-                            </div>
-                          ))}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                    {torneio.participantes?.length || 0}/{(torneio.quantidade_times || 4) * (torneio.jogadores_por_time || 2)}
+                  </span>
 
-                          {/* Botão de edição do elenco completo (Apenas para quem incluiu o time ou Admin) */}
-                          {podeGerenciarTime && (
-                            <div className="flex gap-1 pt-2">
+                  {/* Apenas no modo sorteio individual exibe o botão de adicionar atleta */}
+                  {torneio.tipo_times === 'sorteio' && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTargetTeamId(null);
+                        setShowAddUserModal(true);
+                      }}
+                      className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Plus size={12} />
+                      <span>Adicionar</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SE FOR TIMES FECHADOS: Painel de Escalação de Cada Time */}
+            {torneio.tipo_times === 'fechado' && (
+              <div className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-left">
+                <h3 className="font-black text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Users size={14} className="text-amber-500" />
+                  Times Confirmados ({torneio.jogadores_por_time || 2} atletas por time)
+                </h3>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {torneio.times.map((time, idx) => {
+                    const jogadoresCount = time.jogadores?.length || 0;
+                    const maxJogadores = torneio.jogadores_por_time || 2;
+                    const isCompleto = jogadoresCount >= maxJogadores;
+                    const isExpanded = expandedTeamId === time.id;
+                    const temJogadores = (time.jogadores?.length || 0) > 0;
+                    
+                    const isAdmin = currentUser && torneio.criador_id === currentUser.id;
+                    const isCriadorDoTime = currentUser && time.criador_id && time.criador_id === currentUser.id;
+                    const podeGerenciarTime = isAdmin || isCriadorDoTime;
+
+                    const cardColors = [
+                      { bg: 'bg-amber-500/10', border: 'border-amber-300', text: 'text-amber-950', badge: 'bg-amber-100 text-amber-900' },
+                      { bg: 'bg-blue-500/10', border: 'border-blue-300', text: 'text-blue-950', badge: 'bg-blue-100 text-blue-900' },
+                      { bg: 'bg-emerald-500/10', border: 'border-emerald-300', text: 'text-emerald-950', badge: 'bg-emerald-100 text-emerald-900' },
+                      { bg: 'bg-purple-500/10', border: 'border-purple-300', text: 'text-purple-950', badge: 'bg-purple-100 text-purple-900' },
+                      { bg: 'bg-rose-500/10', border: 'border-rose-300', text: 'text-rose-950', badge: 'bg-rose-100 text-rose-900' },
+                      { bg: 'bg-cyan-500/10', border: 'border-cyan-300', text: 'text-cyan-950', badge: 'bg-cyan-100 text-cyan-900' },
+                      { bg: 'bg-orange-500/10', border: 'border-orange-300', text: 'text-orange-950', badge: 'bg-orange-100 text-orange-900' },
+                      { bg: 'bg-indigo-500/10', border: 'border-indigo-300', text: 'text-indigo-950', badge: 'bg-indigo-100 text-indigo-900' },
+                    ];
+
+                    const currentColor = cardColors[idx % cardColors.length];
+
+                    return (
+                      <div
+                        key={time.id}
+                        onClick={() => {
+                          if (temJogadores) {
+                            setExpandedTeamId(isExpanded ? null : time.id);
+                          }
+                        }}
+                        className={`p-3 rounded-2xl border transition-all cursor-pointer space-y-2 ${
+                          temJogadores
+                            ? `${currentColor.bg} ${currentColor.border} ${isExpanded ? 'shadow-md ring-2 ring-amber-400/30' : 'hover:opacity-90'}`
+                            : 'bg-slate-50/50 border-dashed border-slate-200'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center pb-1 border-b border-slate-200/80">
+                          <span className="font-black text-xs text-slate-900 truncate">{time.nome}</span>
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                              isCompleto ? 'bg-emerald-200/80 text-emerald-950' : currentColor.badge
+                            }`}
+                          >
+                            {jogadoresCount}/{maxJogadores}
+                          </span>
+                        </div>
+
+                        {temJogadores ? (
+                          <div className="space-y-1.5 pt-1">
+                            {isExpanded ? (
+                              <div className="space-y-1">
+                                {(time.jogadores || []).map((j) => (
+                                  <div
+                                    key={j.id}
+                                    className="flex justify-between items-center text-xs font-semibold text-slate-800 bg-white/90 p-1.5 rounded-lg border border-slate-200/60 shadow-2xs"
+                                  >
+                                    <span className="truncate">👤 {j.nome}</span>
+                                  </div>
+                                ))}
+
+                                {podeGerenciarTime && (
+                                  <div className="flex gap-1 pt-2">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setTargetTeamId(time.id);
+                                        setNomeNovoTime(time.nome);
+                                        setJogadoresTimeFechado(time.jogadores || []);
+                                        setShowInscreverTimeModal(true);
+                                      }}
+                                      className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black transition-all shadow-xs cursor-pointer"
+                                    >
+                                      Editar Elenco
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleExcluirTime(time.id, time.nome);
+                                      }}
+                                      className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-[10px] font-bold border border-red-200 cursor-pointer"
+                                      title="Excluir Time"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] font-bold text-slate-600 flex items-center justify-between">
+                                <span>{jogadoresCount} atletas</span>
+                                <span className="text-slate-400 font-bold text-[9px]">▼ Clique para ver</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div>
+                            {(isAdmin || !currentUser || !torneio.times.some((t) => t.jogadores?.some((j) => j.id === currentUser?.id))) && (
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setTargetTeamId(time.id);
-                                  setNomeNovoTime(time.nome);
-                                  setJogadoresTimeFechado(time.jogadores || []);
+                                  setNomeNovoTime('');
+                                  setJogadoresTimeFechado([]);
                                   setShowInscreverTimeModal(true);
                                 }}
-                                className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black transition-all shadow-xs cursor-pointer"
+                                className="w-full py-2 border border-dashed border-amber-300 rounded-lg text-center text-[10px] font-bold text-amber-700 hover:bg-amber-50 transition-all flex items-center justify-center gap-1 cursor-pointer"
                               >
-                                Editar Elenco
+                                <Plus size={11} />
+                                <span>Inscrever Time</span>
                               </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 2. ABA: JOGOS (Confrontos por Fases / Chaves) */}
+        {activeTab === 'jogos' && (
+          <div className="space-y-4">
+            {torneio.chaveamento.length === 0 ? (
+              <div className="text-center py-10 glass rounded-2xl border border-slate-200 p-6 space-y-4">
+                <Shuffle size={36} className="mx-auto text-amber-500" />
+                <div>
+                  <h3 className="font-black text-slate-800 text-sm">Chaveamento ainda não realizado</h3>
+                  <p className="text-xs text-slate-500 mt-1">Clique no botão "Sortear" no topo a qualquer momento para gerar as chaves do torneio!</p>
+                </div>
+                <button
+                  onClick={handleSortearChaveamento}
+                  className="w-full py-3 bg-amber-500 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Shuffle size={14} />
+                  <span>Sortear Chaveamento Agora</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 text-left">
+                {/* Abas por Fase de Chave (Ex: Todas, Oitavas, Quartas, Semifinal, Final) */}
+                {(() => {
+                  const fasesDisponiveis = Array.from(new Set(torneio.chaveamento.map((m) => m.fase)));
+                  const fasesList = ['Todas', ...fasesDisponiveis];
+
+                  return (
+                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                      {fasesList.map((fase) => (
+                        <button
+                          key={fase}
+                          type="button"
+                          onClick={() => setActivePhaseTab(fase)}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer ${
+                            activePhaseTab === fase
+                              ? 'bg-amber-500 text-white shadow-md'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {fase}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* Lista de Partidas filtrada pela aba de Fase */}
+                <div className="space-y-3">
+                  {torneio.chaveamento
+                    .filter((m) => activePhaseTab === 'Todas' || m.fase === activePhaseTab)
+                    .map((match) => {
+                      const isAdmin = currentUser && torneio.criador_id === currentUser.id;
+                      const isFinalizado = (match.placarA || 0) > 0 || (match.placarB || 0) > 0 || match.vencedorId;
+
+                      return (
+                        <div
+                          key={match.id}
+                          className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3"
+                        >
+                          <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
+                            <span>{match.fase}</span>
+                            {isFinalizado ? (
+                              <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Partida Encerrada</span>
+                            ) : (
+                              <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">Partida Ativa</span>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-5 items-center gap-2">
+                            {/* Time A */}
+                            <div
+                              onClick={() => {
+                                if (match.timeA.jogadores && match.timeA.jogadores.length > 0) {
+                                  const nomes = match.timeA.jogadores.map((j) => `• ${j.nome}`).join('\n');
+                                  setDialog({
+                                    isOpen: true,
+                                    title: match.timeA.nome,
+                                    message: `Integrantes do time:\n\n${nomes}`,
+                                    type: 'alert',
+                                    onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+                                  });
+                                }
+                              }}
+                              className={`col-span-2 p-3 rounded-2xl border text-center font-bold text-xs cursor-pointer transition-all ${
+                                match.vencedorId === match.timeA.id
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
+                                  : 'bg-amber-50/70 border-amber-300 text-amber-950'
+                              }`}
+                            >
+                              <span className="block truncate font-extrabold text-sm">{match.timeA.nome}</span>
+                              <span className="inline-block mt-1 text-base font-black px-3 py-0.5 bg-white/90 rounded-lg border border-slate-200">
+                                {match.placarA || 0}
+                              </span>
+                            </div>
+
+                            <div className="col-span-1 text-center font-black text-slate-400 text-base">
+                              X
+                            </div>
+
+                            {/* Time B */}
+                            <div
+                              onClick={() => {
+                                if (match.timeB.jogadores && match.timeB.jogadores.length > 0) {
+                                  const nomes = match.timeB.jogadores.map((j) => `• ${j.nome}`).join('\n');
+                                  setDialog({
+                                    isOpen: true,
+                                    title: match.timeB.nome,
+                                    message: `Integrantes do time:\n\n${nomes}`,
+                                    type: 'alert',
+                                    onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+                                  });
+                                }
+                              }}
+                              className={`col-span-2 p-3 rounded-2xl border text-center font-bold text-xs cursor-pointer transition-all ${
+                                match.vencedorId === match.timeB.id
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
+                                  : 'bg-amber-50/70 border-amber-300 text-amber-950'
+                              }`}
+                            >
+                              <span className="block truncate font-extrabold text-sm">{match.timeB.nome}</span>
+                              <span className="inline-block mt-1 text-base font-black px-3 py-0.5 bg-white/90 rounded-lg border border-slate-200">
+                                {match.placarB || 0}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Botão de Iniciar Partida (Exclusivo para Admin) */}
+                          {isAdmin && (
+                            <div className="pt-2 border-t border-slate-100 flex justify-end">
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleExcluirTime(time.id, time.nome);
+                                onClick={() => {
+                                  setActiveMatch({
+                                    match,
+                                    placarA: match.placarA || 0,
+                                    placarB: match.placarB || 0,
+                                  });
                                 }}
-                                className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-[10px] font-bold border border-red-200 cursor-pointer"
-                                title="Excluir Time"
+                                className="w-full py-2 bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                               >
-                                <Trash2 size={12} />
+                                <Play size={14} />
+                                <span>{isFinalizado ? 'Editar Partida' : 'Iniciar Partida'}</span>
                               </button>
                             </div>
                           )}
                         </div>
-                      ) : (
-                        <div className="text-[10px] font-bold text-slate-600 flex items-center justify-between">
-                          <span>{jogadoresCount} atletas</span>
-                          <span className="text-slate-400 font-bold text-[9px]">▼ Clique para ver</span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    /* Slot Vago */
-                    <div>
-                      {(isAdmin || !currentUser || !torneio.times.some((t) => t.jogadores?.some((j) => j.id === currentUser?.id))) && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setTargetTeamId(time.id);
-                            setNomeNovoTime('');
-                            setJogadoresTimeFechado([]);
-                            setShowInscreverTimeModal(true);
-                          }}
-                          className="w-full py-2 border border-dashed border-amber-300 rounded-lg text-center text-[10px] font-bold text-amber-700 hover:bg-amber-50 transition-all flex items-center justify-center gap-1 cursor-pointer"
-                        >
-                          <Plus size={11} />
-                          <span>Inscrever Time</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
+                      );
+                    })}
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Visualização das Chaves / Confrontos */}
-      {torneio.chaveamento.length === 0 ? (
-        <div className="text-center py-10 glass rounded-2xl border border-slate-200 p-6 space-y-4">
-          <Shuffle size={36} className="mx-auto text-amber-500" />
-          <div>
-            <h3 className="font-black text-slate-800 text-sm">Chaveamento ainda não realizado</h3>
-            <p className="text-xs text-slate-500 mt-1">Clique no botão "Sortear" acima a qualquer momento para gerar as chaves do torneio!</p>
-          </div>
-          <button
-            onClick={handleSortearChaveamento}
-            className="w-full py-3 bg-amber-500 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
-          >
-            <Shuffle size={14} />
-            <span>Sortear Chaveamento Agora</span>
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <h2 className="font-black text-xs uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-            <GitMerge size={14} className="text-amber-500" />
-            Confrontos do Torneio
-          </h2>
+        {/* 3. ABA: CLASSIFICAÇÃO (Tabela de Pontos e Vitórias dos Times) */}
+        {activeTab === 'classificacao' && (
+          <div className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-left">
+            <h3 className="font-black text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <Trophy size={16} className="text-amber-500" />
+              Tabela de Classificação dos Times
+            </h3>
 
-          <div className="space-y-3">
-            {torneio.chaveamento.map((match) => {
-              const isAdmin = currentUser && torneio.criador_id === currentUser.id;
-              const isFinalizado = (match.placarA || 0) > 0 || (match.placarB || 0) > 0 || match.vencedorId;
+            {(() => {
+              // Calcula pontuação e estatísticas de cada time
+              const statsMap: Record<string, { nome: string; v: number; e: number; d: number; gp: number; gc: number; pts: number }> = {};
+
+              (torneio.times || []).forEach((t) => {
+                statsMap[t.id] = { nome: t.nome, v: 0, e: 0, d: 0, gp: 0, gc: 0, pts: 0 };
+              });
+
+              (torneio.chaveamento || []).forEach((m) => {
+                const pA = m.placarA || 0;
+                const pB = m.placarB || 0;
+                const jogou = pA > 0 || pB > 0 || m.vencedorId;
+
+                if (jogou) {
+                  if (statsMap[m.timeA.id]) {
+                    statsMap[m.timeA.id].gp += pA;
+                    statsMap[m.timeA.id].gc += pB;
+                  }
+                  if (statsMap[m.timeB.id]) {
+                    statsMap[m.timeB.id].gp += pB;
+                    statsMap[m.timeB.id].gc += pA;
+                  }
+
+                  if (pA > pB) {
+                    if (statsMap[m.timeA.id]) { statsMap[m.timeA.id].v += 1; statsMap[m.timeA.id].pts += 3; }
+                    if (statsMap[m.timeB.id]) { statsMap[m.timeB.id].d += 1; }
+                  } else if (pB > pA) {
+                    if (statsMap[m.timeB.id]) { statsMap[m.timeB.id].v += 1; statsMap[m.timeB.id].pts += 3; }
+                    if (statsMap[m.timeA.id]) { statsMap[m.timeA.id].d += 1; }
+                  } else {
+                    if (statsMap[m.timeA.id]) { statsMap[m.timeA.id].e += 1; statsMap[m.timeA.id].pts += 1; }
+                    if (statsMap[m.timeB.id]) { statsMap[m.timeB.id].e += 1; statsMap[m.timeB.id].pts += 1; }
+                  }
+                }
+              });
+
+              const tabelaOrdenada = Object.values(statsMap).sort((a, b) => {
+                if (b.pts !== a.pts) return b.pts - a.pts;
+                if (b.v !== a.v) return b.v - a.v;
+                return (b.gp - b.gc) - (a.gp - a.gc);
+              });
 
               return (
-                <div
-                  key={match.id}
-                  className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3"
-                >
-                  <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
-                    <span>{match.fase}</span>
-                    {isFinalizado ? (
-                      <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Partida Encerrada</span>
-                    ) : (
-                      <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">Partida Ativa</span>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-5 items-center gap-2">
-                    {/* Time A */}
-                    <div
-                      onClick={() => {
-                        if (match.timeA.jogadores && match.timeA.jogadores.length > 0) {
-                          const nomes = match.timeA.jogadores.map((j) => `• ${j.nome}`).join('\n');
-                          setDialog({
-                            isOpen: true,
-                            title: match.timeA.nome,
-                            message: `Integrantes do time:\n\n${nomes}`,
-                            type: 'alert',
-                            onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
-                          });
-                        }
-                      }}
-                      className={`col-span-2 p-3 rounded-2xl border text-center font-bold text-xs cursor-pointer transition-all ${
-                        match.vencedorId === match.timeA.id
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
-                          : 'bg-amber-50/70 border-amber-300 text-amber-950'
-                      }`}
-                    >
-                      <span className="block truncate font-extrabold text-sm">{match.timeA.nome}</span>
-                      <span className="inline-block mt-1 text-base font-black px-3 py-0.5 bg-white/90 rounded-lg border border-slate-200">
-                        {match.placarA || 0}
-                      </span>
-                    </div>
-
-                    <div className="col-span-1 text-center font-black text-slate-400 text-base">
-                      X
-                    </div>
-
-                    {/* Time B */}
-                    <div
-                      onClick={() => {
-                        if (match.timeB.jogadores && match.timeB.jogadores.length > 0) {
-                          const nomes = match.timeB.jogadores.map((j) => `• ${j.nome}`).join('\n');
-                          setDialog({
-                            isOpen: true,
-                            title: match.timeB.nome,
-                            message: `Integrantes do time:\n\n${nomes}`,
-                            type: 'alert',
-                            onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
-                          });
-                        }
-                      }}
-                      className={`col-span-2 p-3 rounded-2xl border text-center font-bold text-xs cursor-pointer transition-all ${
-                        match.vencedorId === match.timeB.id
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
-                          : 'bg-amber-50/70 border-amber-300 text-amber-950'
-                      }`}
-                    >
-                      <span className="block truncate font-extrabold text-sm">{match.timeB.nome}</span>
-                      <span className="inline-block mt-1 text-base font-black px-3 py-0.5 bg-white/90 rounded-lg border border-slate-200">
-                        {match.placarB || 0}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Botão de Iniciar Partida (Exclusivo para Admin) */}
-                  {isAdmin && (
-                    <div className="pt-2 border-t border-slate-100 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveMatch({
-                            match,
-                            placarA: match.placarA || 0,
-                            placarB: match.placarB || 0,
-                          });
-                        }}
-                        className="w-full py-2 bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Play size={14} />
-                        <span>{isFinalizado ? 'Editar Partida' : 'Iniciar Partida'}</span>
-                      </button>
-                    </div>
-                  )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-semibold">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                        <th className="pb-2"># Time</th>
+                        <th className="pb-2 text-center">PTS</th>
+                        <th className="pb-2 text-center">V</th>
+                        <th className="pb-2 text-center">E</th>
+                        <th className="pb-2 text-center">D</th>
+                        <th className="pb-2 text-center">SG</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {tabelaOrdenada.map((item, idx) => {
+                        const sg = item.gp - item.gc;
+                        return (
+                          <tr key={idx} className={idx === 0 ? 'bg-amber-50/50 font-black' : ''}>
+                            <td className="py-2.5 font-bold text-slate-800 flex items-center gap-1.5">
+                              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                                idx === 0 ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700'
+                              }`}>
+                                {idx + 1}
+                              </span>
+                              <span className="truncate max-w-[110px]">{item.nome}</span>
+                            </td>
+                            <td className="py-2.5 text-center font-black text-amber-700">{item.pts}</td>
+                            <td className="py-2.5 text-center text-emerald-600 font-bold">{item.v}</td>
+                            <td className="py-2.5 text-center text-slate-500 font-bold">{item.e}</td>
+                            <td className="py-2.5 text-center text-red-500 font-bold">{item.d}</td>
+                            <td className="py-2.5 text-center font-bold text-slate-700">{sg > 0 ? `+${sg}` : sg}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               );
-            })}
+            })()}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* SUB-RODAPÉ DO TORNEIO (Times | Jogos | Classificação) */}
+      <div className="fixed bottom-16 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg px-4 py-2 flex justify-around items-center max-w-md mx-auto">
+        <button
+          type="button"
+          onClick={() => setActiveTab('times')}
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-black transition-all cursor-pointer ${
+            activeTab === 'times' ? 'text-amber-600 scale-105' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <Users size={18} />
+          <span>Times</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('jogos')}
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-black transition-all cursor-pointer ${
+            activeTab === 'jogos' ? 'text-amber-600 scale-105' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <GitMerge size={18} />
+          <span>Jogos</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('classificacao')}
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-black transition-all cursor-pointer ${
+            activeTab === 'classificacao' ? 'text-amber-600 scale-105' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <BarChart2 size={18} />
+          <span>Classificação</span>
+        </button>
+      </div>
 
       {/* Modal de Edição de Datas */}
       <AnimatePresence>
