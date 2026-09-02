@@ -625,13 +625,27 @@ export default function TorneioDetails() {
         const timeVencedor = matchAtual.vencedorId === matchAtual.timeA.id ? matchAtual.timeA : matchAtual.timeB;
         const faseAtual = matchAtual.fase;
 
-        // Se for Semifinal e o vencedor foi definido, atualiza o time correspondente no jogo da Final
+        // Se for Semifinal e o vencedor foi definido, atualiza ou cria o jogo da Final
         if (faseAtual === 'Semifinal') {
           const semis = novosConfrontos.filter((m) => m.fase === 'Semifinal');
           const indexSemi = semis.findIndex((m) => m.id === matchId);
-          const finalMatchIndex = novosConfrontos.findIndex((m) => m.fase === 'Final');
+          let finalMatchIndex = novosConfrontos.findIndex((m) => m.fase === 'Final');
 
-          if (finalMatchIndex !== -1 && indexSemi !== -1) {
+          if (finalMatchIndex === -1) {
+            // Se o torneio foi sorteado na versão anterior (sem o placeholder da final), cria a Final agora!
+            const semi1Vencedor = semis[0]?.vencedorId ? (semis[0].vencedorId === semis[0].timeA.id ? semis[0].timeA : semis[0].timeB) : { id: 'pending_semi_0', nome: 'Vencedor Semi 1' };
+            const semi2Vencedor = semis[1]?.vencedorId ? (semis[1].vencedorId === semis[1].timeA.id ? semis[1].timeA : semis[1].timeB) : { id: 'pending_semi_1', nome: 'Vencedor Semi 2' };
+
+            novosConfrontos.push({
+              id: `match_final_0_${Date.now()}`,
+              fase: 'Final',
+              rodada: 2,
+              timeA: semi1Vencedor,
+              timeB: semi2Vencedor,
+              placarA: 0,
+              placarB: 0,
+            });
+          } else {
             const finalMatch = { ...novosConfrontos[finalMatchIndex] };
             if (indexSemi === 0) {
               finalMatch.timeA = timeVencedor;
@@ -1137,10 +1151,14 @@ export default function TorneioDetails() {
               </div>
             ) : (
               <div className="space-y-4 text-left">
-                {/* Abas por Fase de Chave (Ex: Todas, Quartas de Final, Semifinal, Final) */}
+                {/* Abas por Fase de Chave (Ex: Todas, Semifinal, Final) */}
                 {(() => {
                   const ordemDesejada = ['Todas', 'Oitavas de Final', 'Quartas de Final', 'Semifinal', 'Final'];
                   const fasesDisponiveis = Array.from(new Set(torneio.chaveamento.map((m) => m.fase)));
+                  // Garante que Final sempre apareça caso o torneio seja por chaveamento!
+                  if (torneio.formato === 'chaveamento' && !fasesDisponiveis.includes('Final')) {
+                    fasesDisponiveis.push('Final');
+                  }
                   const fasesList = ordemDesejada.filter((f) => f === 'Todas' || fasesDisponiveis.includes(f));
 
                   return (
@@ -1151,7 +1169,7 @@ export default function TorneioDetails() {
                           type="button"
                           onClick={() => setActivePhaseTab(fase)}
                           className={`px-3.5 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer ${
-                            activePhaseTab === fase || (activePhaseTab !== 'Todas' && !fasesDisponiveis.includes(activePhaseTab) && fase === 'Todas')
+                            activePhaseTab === fase
                               ? 'bg-amber-500 text-white shadow-md'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
@@ -1164,114 +1182,123 @@ export default function TorneioDetails() {
                 })()}
 
                 {/* Lista de Partidas filtrada pela aba de Fase */}
-                <div className="space-y-3">
-                  {torneio.chaveamento
-                    .filter((m) => {
-                      const fasesDisponiveis = Array.from(new Set(torneio.chaveamento.map((x) => x.fase)));
-                      if (activePhaseTab !== 'Todas' && !fasesDisponiveis.includes(activePhaseTab)) {
-                        return true; // Se a aba anterior não existe neste torneio, mostra Todas
-                      }
-                      return activePhaseTab === 'Todas' || m.fase === activePhaseTab;
-                    })
-                    .map((match) => {
-                      const isAdmin = currentUser && torneio.criador_id === currentUser.id;
-                      const isFinalizado = (match.placarA || 0) > 0 || (match.placarB || 0) > 0 || match.vencedorId;
+                {(() => {
+                  const partidasFiltradas = torneio.chaveamento.filter((m) => activePhaseTab === 'Todas' || m.fase === activePhaseTab);
 
-                      return (
-                        <div
-                          key={match.id}
-                          className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3"
-                        >
-                          <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
-                            <span>{match.fase}</span>
-                            {isFinalizado ? (
-                              <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Partida Encerrada</span>
-                            ) : (
-                              <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">Partida Ativa</span>
+                  if (partidasFiltradas.length === 0) {
+                    return (
+                      <div className="p-6 text-center bg-slate-50 border border-dashed border-slate-200 rounded-2xl space-y-1">
+                        <p className="text-xs font-bold text-slate-700">Aguardando definição dos finalistas! 🏆</p>
+                        <p className="text-[10px] font-medium text-slate-400">
+                          Finalize as partidas da Semifinal para que os times vencedores avancem para a Final.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {partidasFiltradas.map((match) => {
+                        const isAdmin = currentUser && torneio.criador_id === currentUser.id;
+                        const isFinalizado = (match.placarA || 0) > 0 || (match.placarB || 0) > 0 || match.vencedorId;
+
+                        return (
+                          <div
+                            key={match.id}
+                            className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3"
+                          >
+                            <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
+                              <span>{match.fase}</span>
+                              {isFinalizado ? (
+                                <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Partida Encerrada</span>
+                              ) : (
+                                <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">Partida Ativa</span>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-5 items-center gap-2">
+                              {/* Time A */}
+                              <div
+                                onClick={() => {
+                                  if (match.timeA.jogadores && match.timeA.jogadores.length > 0) {
+                                    const nomes = match.timeA.jogadores.map((j) => `• ${j.nome}`).join('\n');
+                                    setDialog({
+                                      isOpen: true,
+                                      title: match.timeA.nome,
+                                      message: `Integrantes do time:\n\n${nomes}`,
+                                      type: 'alert',
+                                      onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+                                    });
+                                  }
+                                }}
+                                className={`col-span-2 p-3 rounded-2xl border text-center font-bold text-xs cursor-pointer transition-all ${
+                                  match.vencedorId === match.timeA.id
+                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
+                                    : 'bg-amber-50/70 border-amber-300 text-amber-950'
+                                }`}
+                              >
+                                <span className="block truncate font-extrabold text-sm">{match.timeA.nome}</span>
+                                <span className="inline-block mt-1 text-base font-black px-3 py-0.5 bg-white/90 rounded-lg border border-slate-200">
+                                  {match.placarA || 0}
+                                </span>
+                              </div>
+
+                              <div className="col-span-1 text-center font-black text-slate-400 text-base">
+                                X
+                              </div>
+
+                              {/* Time B */}
+                              <div
+                                onClick={() => {
+                                  if (match.timeB.jogadores && match.timeB.jogadores.length > 0) {
+                                    const nomes = match.timeB.jogadores.map((j) => `• ${j.nome}`).join('\n');
+                                    setDialog({
+                                      isOpen: true,
+                                      title: match.timeB.nome,
+                                      message: `Integrantes do time:\n\n${nomes}`,
+                                      type: 'alert',
+                                      onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+                                    });
+                                  }
+                                }}
+                                className={`col-span-2 p-3 rounded-2xl border text-center font-bold text-xs cursor-pointer transition-all ${
+                                  match.vencedorId === match.timeB.id
+                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
+                                    : 'bg-amber-50/70 border-amber-300 text-amber-950'
+                                }`}
+                              >
+                                <span className="block truncate font-extrabold text-sm">{match.timeB.nome}</span>
+                                <span className="inline-block mt-1 text-base font-black px-3 py-0.5 bg-white/90 rounded-lg border border-slate-200">
+                                  {match.placarB || 0}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Botão de Iniciar Partida (Apenas para Admin e enquanto a partida NÃO estiver encerrada) */}
+                            {isAdmin && !isFinalizado && !match.timeA.id.startsWith('pending') && !match.timeB.id.startsWith('pending') && (
+                              <div className="pt-2 border-t border-slate-100 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMatch({
+                                      match,
+                                      placarA: match.placarA || 0,
+                                      placarB: match.placarB || 0,
+                                    });
+                                  }}
+                                  className="w-full py-2 bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                                >
+                                  <Play size={14} />
+                                  <span>Iniciar Partida</span>
+                                </button>
+                              </div>
                             )}
                           </div>
-
-                          <div className="grid grid-cols-5 items-center gap-2">
-                            {/* Time A */}
-                            <div
-                              onClick={() => {
-                                if (match.timeA.jogadores && match.timeA.jogadores.length > 0) {
-                                  const nomes = match.timeA.jogadores.map((j) => `• ${j.nome}`).join('\n');
-                                  setDialog({
-                                    isOpen: true,
-                                    title: match.timeA.nome,
-                                    message: `Integrantes do time:\n\n${nomes}`,
-                                    type: 'alert',
-                                    onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
-                                  });
-                                }
-                              }}
-                              className={`col-span-2 p-3 rounded-2xl border text-center font-bold text-xs cursor-pointer transition-all ${
-                                match.vencedorId === match.timeA.id
-                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
-                                  : 'bg-amber-50/70 border-amber-300 text-amber-950'
-                              }`}
-                            >
-                              <span className="block truncate font-extrabold text-sm">{match.timeA.nome}</span>
-                              <span className="inline-block mt-1 text-base font-black px-3 py-0.5 bg-white/90 rounded-lg border border-slate-200">
-                                {match.placarA || 0}
-                              </span>
-                            </div>
-
-                            <div className="col-span-1 text-center font-black text-slate-400 text-base">
-                              X
-                            </div>
-
-                            {/* Time B */}
-                            <div
-                              onClick={() => {
-                                if (match.timeB.jogadores && match.timeB.jogadores.length > 0) {
-                                  const nomes = match.timeB.jogadores.map((j) => `• ${j.nome}`).join('\n');
-                                  setDialog({
-                                    isOpen: true,
-                                    title: match.timeB.nome,
-                                    message: `Integrantes do time:\n\n${nomes}`,
-                                    type: 'alert',
-                                    onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
-                                  });
-                                }
-                              }}
-                              className={`col-span-2 p-3 rounded-2xl border text-center font-bold text-xs cursor-pointer transition-all ${
-                                match.vencedorId === match.timeB.id
-                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-black shadow-xs'
-                                  : 'bg-amber-50/70 border-amber-300 text-amber-950'
-                              }`}
-                            >
-                              <span className="block truncate font-extrabold text-sm">{match.timeB.nome}</span>
-                              <span className="inline-block mt-1 text-base font-black px-3 py-0.5 bg-white/90 rounded-lg border border-slate-200">
-                                {match.placarB || 0}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Botão de Iniciar Partida (Apenas para Admin e enquanto a partida NÃO estiver encerrada) */}
-                          {isAdmin && !isFinalizado && !match.timeA.id.startsWith('pending') && !match.timeB.id.startsWith('pending') && (
-                            <div className="pt-2 border-t border-slate-100 flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveMatch({
-                                    match,
-                                    placarA: match.placarA || 0,
-                                    placarB: match.placarB || 0,
-                                  });
-                                }}
-                                className="w-full py-2 bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-                              >
-                                <Play size={14} />
-                                <span>Iniciar Partida</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
