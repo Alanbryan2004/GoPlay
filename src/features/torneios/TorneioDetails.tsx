@@ -1197,39 +1197,76 @@ export default function TorneioDetails() {
                     </div>
                   )}
 
-                  {/* Autocomplete de busca de atletas */}
+                  {/* Campo de Busca e Inclusão Livre de Jogadores (Nome cadastrado ou Nome digitado) */}
                   <div className="space-y-1 relative">
-                    <input
-                      type="text"
-                      value={buscaJogadorTime}
-                      onChange={(e) => {
-                        const txt = e.target.value;
-                        setBuscaJogadorTime(txt);
-                        if (!txt.trim() || !torneio) {
-                          setSugestoesJogadorTime([]);
-                          return;
-                        }
-                        // Pega todos os IDs de atletas que já estão em qualquer time do torneio
-                        const idsJaEmTime = torneio.times.flatMap((t) => (t.jogadores || []).map((j) => j.id));
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={buscaJogadorTime}
+                        onChange={(e) => {
+                          const txt = e.target.value;
+                          setBuscaJogadorTime(txt);
+                          if (!txt.trim() || !torneio) {
+                            setSugestoesJogadorTime([]);
+                            return;
+                          }
+                          const idsJaEmTime = torneio.times.flatMap((t) => (t.jogadores || []).map((j) => j.id));
 
-                        const filtrados = todasPessoas.filter((p) => {
-                          const jaEstaEmUmTime = idsJaEmTime.includes(p.id);
-                          const jaEstaNoDraftModal = jogadoresTimeFechado.some((j) => j.id === p.id);
-                          if (jaEstaEmUmTime || jaEstaNoDraftModal) return false;
+                          const filtrados = todasPessoas.filter((p) => {
+                            const jaEstaEmUmTime = idsJaEmTime.includes(p.id);
+                            const jaEstaNoDraftModal = jogadoresTimeFechado.some((j) => j.id === p.id);
+                            if (jaEstaEmUmTime || jaEstaNoDraftModal) return false;
 
-                          return (
-                            p.nome.toLowerCase().includes(txt.toLowerCase()) ||
-                            p.email?.toLowerCase().includes(txt.toLowerCase())
-                          );
-                        });
-                        setSugestoesJogadorTime(filtrados.slice(0, 5));
-                      }}
-                      placeholder="Adicionar jogador pelo nome..."
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    />
+                            return (
+                              p.nome.toLowerCase().includes(txt.toLowerCase()) ||
+                              p.email?.toLowerCase().includes(txt.toLowerCase())
+                            );
+                          });
+                          setSugestoesJogadorTime(filtrados.slice(0, 5));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (buscaJogadorTime.trim()) {
+                              const customName = buscaJogadorTime.trim();
+                              if (!jogadoresTimeFechado.some((j) => j.nome.toLowerCase() === customName.toLowerCase())) {
+                                setJogadoresTimeFechado([
+                                  ...jogadoresTimeFechado,
+                                  { id: `custom_${Date.now()}_${Math.random()}`, nome: customName },
+                                ]);
+                              }
+                              setBuscaJogadorTime('');
+                              setSugestoesJogadorTime([]);
+                            }
+                          }
+                        }}
+                        placeholder="Digite o nome do jogador e aperte Enter..."
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (buscaJogadorTime.trim()) {
+                            const customName = buscaJogadorTime.trim();
+                            if (!jogadoresTimeFechado.some((j) => j.nome.toLowerCase() === customName.toLowerCase())) {
+                              setJogadoresTimeFechado([
+                                ...jogadoresTimeFechado,
+                                { id: `custom_${Date.now()}_${Math.random()}`, nome: customName },
+                              ]);
+                            }
+                            setBuscaJogadorTime('');
+                            setSugestoesJogadorTime([]);
+                          }
+                        }}
+                        className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer"
+                      >
+                        + Adicionar
+                      </button>
+                    </div>
 
                     {sugestoesJogadorTime.length > 0 && (
-                      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-lg bg-white divide-y divide-slate-100 max-h-36 overflow-y-auto z-50 relative">
+                      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-lg bg-white divide-y divide-slate-100 max-h-36 overflow-y-auto z-50 absolute left-0 right-0 top-full mt-1">
                         {sugestoesJogadorTime.map((p) => (
                           <button
                             key={p.id}
@@ -1296,36 +1333,64 @@ export default function TorneioDetails() {
               </h3>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase">Buscar Jogador pelo Nome</label>
-                <input
-                  type="text"
-                  value={buscaAtleta}
-                  onChange={(e) => handleBuscaChange(e.target.value)}
-                  placeholder="Digite o nome..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
+                <label className="text-[10px] font-black text-slate-500 uppercase">Nome do Jogador</label>
+                <div className="flex gap-2 relative">
+                  <input
+                    type="text"
+                    value={buscaAtleta}
+                    onChange={(e) => handleBuscaChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (buscaAtleta.trim()) {
+                          handleAdicionarAtleta({
+                            id: `custom_${Date.now()}_${Math.random()}`,
+                            nome: buscaAtleta.trim(),
+                          });
+                        }
+                      }
+                    }}
+                    placeholder="Digite o nome e aperte Enter..."
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
 
-                {/* Autocomplete de sugestões */}
-                {sugestoesAtletas.length > 0 && (
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-lg bg-white divide-y divide-slate-100 max-h-40 overflow-y-auto">
-                    {sugestoesAtletas.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => handleAdicionarAtleta(p)}
-                        className="w-full p-2.5 text-left text-xs font-bold text-slate-800 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer"
-                      >
-                        {p.foto ? (
-                          <img src={p.foto} alt={p.nome} className="w-6 h-6 rounded-full object-cover shrink-0" />
-                        ) : (
-                          <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px] shrink-0">
-                            {p.nome.charAt(0)}
-                          </div>
-                        )}
-                        <span className="truncate">{p.nome}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (buscaAtleta.trim()) {
+                        handleAdicionarAtleta({
+                          id: `custom_${Date.now()}_${Math.random()}`,
+                          nome: buscaAtleta.trim(),
+                        });
+                      }
+                    }}
+                    className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer"
+                  >
+                    + Adicionar
+                  </button>
+
+                  {/* Autocomplete de sugestões */}
+                  {sugestoesAtletas.length > 0 && (
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-lg bg-white divide-y divide-slate-100 max-h-40 overflow-y-auto absolute left-0 right-0 top-full mt-1 z-50">
+                      {sugestoesAtletas.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => handleAdicionarAtleta(p)}
+                          className="w-full p-2.5 text-left text-xs font-bold text-slate-800 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer"
+                        >
+                          {p.foto ? (
+                            <img src={p.foto} alt={p.nome} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px] shrink-0">
+                              {p.nome.charAt(0)}
+                            </div>
+                          )}
+                          <span className="truncate">{p.nome}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-2 pt-2">
