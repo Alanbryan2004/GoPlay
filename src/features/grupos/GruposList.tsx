@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Grupo, Usuario } from '../../types';
-import { Plus, Users, X, UserMinus, UserPlus, CalendarRange, Settings, Check, Shield, Trash2, LogOut, Search, Crown } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Plus, Users, X, UserMinus, UserPlus, CalendarRange, Settings, Check, Shield, Trash2, LogOut, Search, Crown, Link2, Share2 } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Dialog from '../../components/common/Dialog';
 import { getPermissoesGrupo, PERMISSOES_PADRAO } from '../../utils/permissoesGrupo';
 import type { PermissaoItem } from '../../utils/permissoesGrupo';
 
 export default function GruposList() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [myMemberships, setMyMemberships] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,12 +122,122 @@ export default function GruposList() {
           } else {
             setPendingGroupRequests({});
           }
+
+          // Checar se há convite de entrada na URL (?entrar=ID ou ?invite=ID)
+          const inviteId = searchParams.get('entrar') || searchParams.get('invite') || searchParams.get('grupo_id');
+          if (inviteId && gruposData) {
+            checkInviteFromUrl(inviteId, gruposData as Grupo[], memData || [], targetUserId);
+          }
         }
       }
     } catch (e) {
       console.error('Erro ao buscar grupos e associações:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Tratar entrada / solicitação via link de convite recebido na URL
+  const checkInviteFromUrl = (
+    inviteGrupoId: string,
+    allGrupos: Grupo[],
+    userMemberships: any[],
+    _userId: string
+  ) => {
+    const targetGrupo = allGrupos.find((g) => g.id === inviteGrupoId);
+    if (!targetGrupo) return;
+
+    // Limpar o parâmetro da URL para não reabrir a cada reload
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('entrar');
+      next.delete('invite');
+      next.delete('grupo_id');
+      return next;
+    }, { replace: true });
+
+    const existingMem = userMemberships.find((m) => m.grupo_id === inviteGrupoId);
+
+    if (existingMem) {
+      if (existingMem.status === 'aprovado') {
+        openManageMembers(targetGrupo);
+      } else if (existingMem.status === 'pendente') {
+        setDialog({
+          isOpen: true,
+          title: 'Solicitação em Análise ⏳',
+          message: `Você já solicitou entrada no grupo "${targetGrupo.nome}". Aguarde a aprovação do Administrador!`,
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+      } else if (existingMem.status === 'convidado') {
+        setDialog({
+          isOpen: true,
+          title: 'Convite Recebido! 📩',
+          message: `Você foi convidado para o grupo "${targetGrupo.nome}". Deseja aceitar a entrada agora?`,
+          type: 'confirm',
+          onConfirm: () => {
+            setDialog((prev) => ({ ...prev, isOpen: false }));
+            handleAcceptInvite(targetGrupo.id);
+          },
+          onCancel: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+      }
+      return;
+    }
+
+    // Se ainda não tiver nenhum vínculo com o grupo
+    if (targetGrupo.publico) {
+      setDialog({
+        isOpen: true,
+        title: 'Entrar no Grupo 👥',
+        message: `Você recebeu um link para participar do grupo público "${targetGrupo.nome}". Deseja entrar agora?`,
+        type: 'confirm',
+        onConfirm: () => {
+          setDialog((prev) => ({ ...prev, isOpen: false }));
+          handleJoinPublicGroup(targetGrupo.id);
+        },
+        onCancel: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+    } else {
+      setDialog({
+        isOpen: true,
+        title: 'Solicitar Acesso ao Grupo 🔒',
+        message: `Você recebeu um link de convite para o grupo privado "${targetGrupo.nome}". Deseja solicitar acesso para o Administrador aprovar?`,
+        type: 'confirm',
+        onConfirm: () => {
+          setDialog((prev) => ({ ...prev, isOpen: false }));
+          handleRequestPrivateGroup(targetGrupo.id);
+        },
+        onCancel: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+    }
+  };
+
+  // Compartilhar Link de Convite do Grupo (via WhatsApp / Redes Sociais)
+  const handleShareGrupo = async (grupo: Grupo) => {
+    const inviteUrl = `${window.location.origin}/grupos?entrar=${grupo.id}`;
+    const tipo = grupo.publico ? 'Público (Entrada direta)' : 'Privado (Requer aprovação do Administrador)';
+    const texto = `👥 Convite para o Grupo *${grupo.nome}* no GoPlay!\n\nStatus: ${tipo}\n\nClique no link para entrar ou solicitar acesso ao grupo:\n${inviteUrl}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Grupo ${grupo.nome} - GoPlay`,
+          text: texto,
+          url: inviteUrl,
+        });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(texto);
+        setDialog({
+          isOpen: true,
+          title: 'Link Copiado! 🔗',
+          message: `O link de convite do grupo "${grupo.nome}" foi copiado para a área de transferência. Agora é só colar no WhatsApp ou redes sociais!`,
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+      }
+    } catch (e) {
+      console.warn('Compartilhamento cancelado ou não suportado:', e);
     }
   };
 
@@ -1326,6 +1437,15 @@ export default function GruposList() {
                 </div>
                 
                 <div className="flex items-center gap-1 shrink-0">
+                  {/* Botão Compartilhar Link do Grupo */}
+                  <button
+                    onClick={() => handleShareGrupo(selectedGrupo)}
+                    className="p-1.5 hover:bg-slate-100 rounded-lg text-indigo-600 transition-colors cursor-pointer"
+                    title="Copiar Link de Convite do Grupo"
+                  >
+                    <Link2 size={18} />
+                  </button>
+
                   {isOwner && (
                     <button
                       onClick={() => {
@@ -1517,9 +1637,29 @@ export default function GruposList() {
                 {/* 3. CONVIDAR AMIGOS (Requer permissão de Incluir Usuário) */}
                 {hasPermission('Incluir Usuario') && (
                   <div>
-                    <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider mb-2">
-                      Convidar Amigos
-                    </h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
+                        Convidar Amigos
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => handleShareGrupo(selectedGrupo)}
+                        className="text-[10px] font-extrabold text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Link2 size={12} />
+                        <span>Copiar Link</span>
+                      </button>
+                    </div>
+
+                    {/* Botão de Destaque: Compartilhar Link de Convite do Grupo */}
+                    <button
+                      type="button"
+                      onClick={() => handleShareGrupo(selectedGrupo)}
+                      className="w-full mb-3 py-2.5 px-3 bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                    >
+                      <Link2 size={16} className="text-indigo-600" />
+                      <span>Compartilhar Link de Convite (WhatsApp / Redes)</span>
+                    </button>
                     {amigosParaAdicionar.length === 0 ? (
                       <p className="text-xs text-slate-450 py-3 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
                         Nenhum amigo pendente disponível.
