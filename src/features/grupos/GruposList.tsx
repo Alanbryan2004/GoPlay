@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Grupo, Usuario } from '../../types';
-import { Plus, Users, X, UserMinus, UserPlus, CalendarRange, Settings, Check, Shield, Trash2, LogOut, Search, Crown, Link2, Share2 } from 'lucide-react';
+import { Plus, Users, X, UserMinus, UserPlus, CalendarRange, Settings, Check, Shield, Trash2, LogOut, Search, Crown, Link2, Share2, ArrowLeft } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Dialog from '../../components/common/Dialog';
 import { getPermissoesGrupo, PERMISSOES_PADRAO } from '../../utils/permissoesGrupo';
@@ -27,6 +27,12 @@ export default function GruposList() {
   const [groupPermissions, setGroupPermissions] = useState<PermissaoItem[]>([]);
   const [amigosParaAdicionar, setAmigosParaAdicionar] = useState<Usuario[]>([]);
   const [loadingMembros, setLoadingMembros] = useState(false);
+
+  // Aba do modal detalhado: 'integrantes' ou 'adicionar'
+  const [modalTab, setModalTab] = useState<'integrantes' | 'adicionar'>('integrantes');
+  const [searchAtletaNome, setSearchAtletaNome] = useState('');
+  const [usuariosBuscados, setUsuariosBuscados] = useState<Usuario[]>([]);
+  const [buscandoUsuarios, setBuscandoUsuarios] = useState(false);
   // Mapa de grupo_id -> contagem de solicitações de entrada pendentes (para grupos que o usuário administra)
   const [pendingGroupRequests, setPendingGroupRequests] = useState<Record<string, number>>({});
 
@@ -344,6 +350,8 @@ export default function GruposList() {
     setEditGroupPublico(grupo.publico);
     setEditGroupFoto(grupo.foto || '');
     setIsEditingGroup(false);
+    setModalTab('integrantes');
+    setSearchAtletaNome('');
     
     // Carregar permissões do grupo em segundo plano
     getPermissoesGrupo(grupo.id).then((perms) => {
@@ -352,6 +360,42 @@ export default function GruposList() {
 
     await fetchMembersOfSelectedGroup(grupo.id);
   };
+
+  // Buscar atletas cadastrados no banco ou filtrar amigos conforme o usuário digita o nome
+  useEffect(() => {
+    if (modalTab !== 'adicionar' || !selectedGrupo) return;
+
+    const delayDebounce = setTimeout(async () => {
+      const term = searchAtletaNome.trim();
+      if (term.length >= 2) {
+        setBuscandoUsuarios(true);
+        try {
+          // Buscar usuários com nome ou email compatível no Supabase
+          const { data, error } = await supabase
+            .from('usuarios')
+            .select('id, nome, foto, email')
+            .or(`nome.ilike.%${term}%,email.ilike.%${term}%`)
+            .limit(25);
+
+          if (!error && data) {
+            // Filtrar quem já for membro ou já estiver convidado no grupo
+            const idsJaNoGrupo = new Set(membros.map((m) => m.usuario_id));
+            const filtrados = (data as Usuario[]).filter((u) => !idsJaNoGrupo.has(u.id));
+            setUsuariosBuscados(filtrados);
+          }
+        } catch (e) {
+          console.error('Erro na busca de usuários:', e);
+        } finally {
+          setBuscandoUsuarios(false);
+        }
+      } else {
+        // Se termo curto ou vazio, mostra os amigos disponíveis como sugestão inicial
+        setUsuariosBuscados(amigosParaAdicionar);
+      }
+    }, 250);
+
+    return () => clearTimeout(delayDebounce);
+  }, [searchAtletaNome, modalTab, selectedGrupo, membros, amigosParaAdicionar]);
 
   const fetchMembersOfSelectedGroup = async (grupoId: string) => {
     setLoadingMembros(true);
@@ -1405,7 +1449,153 @@ export default function GruposList() {
                   </button>
                 </div>
               </div>
+            ) : modalTab === 'adicionar' ? (
+              /* ABA DEDICADA: ADICIONAR NOVOS USUÁRIOS (TELA LIMPA COM BUSCA EM TEMPO REAL) */
+              <div className="flex-1 flex flex-col min-h-0">
+                {/* Cabeçalho da Aba Adicionar */}
+                <div className="flex items-center justify-between border-b border-slate-150 pb-3 mb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalTab('integrantes');
+                        setSearchAtletaNome('');
+                      }}
+                      className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors cursor-pointer"
+                      title="Voltar para Integrantes"
+                    >
+                      <ArrowLeft size={18} />
+                    </button>
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-black text-slate-900 leading-tight">Adicionar Usuários</h2>
+                      <p className="text-[10px] font-bold text-slate-450 truncate">Grupo: {selectedGrupo.nome}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedGrupo(null);
+                      setModalTab('integrantes');
+                    }}
+                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Botão de Destaque: Compartilhar Link de Convite no WhatsApp */}
+                <button
+                  type="button"
+                  onClick={() => handleShareGrupo(selectedGrupo)}
+                  className="w-full mb-3 py-2.5 px-3 bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
+                >
+                  <Link2 size={16} className="text-indigo-600" />
+                  <span>Copiar Link de Convite (WhatsApp / Redes)</span>
+                </button>
+
+                {/* Campo de Busca em Tempo Real */}
+                <div className="relative mb-3">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchAtletaNome}
+                    onChange={(e) => setSearchAtletaNome(e.target.value)}
+                    placeholder="Digite o nome ou e-mail do atleta..."
+                    autoFocus
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-8 text-xs text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 placeholder:font-medium placeholder:text-slate-400 transition-all"
+                  />
+                  {searchAtletaNome && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchAtletaNome('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Lista de Atletas Disponíveis Filtrados */}
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1 no-scrollbar min-h-48 max-h-72">
+                  <div className="flex items-center justify-between px-1 mb-1">
+                    <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
+                      {searchAtletaNome.trim().length >= 2 ? 'Resultados da Busca' : 'Amigos Sugeridos'}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      {usuariosBuscados.length} disponíveis
+                    </span>
+                  </div>
+
+                  {buscandoUsuarios ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-slate-400 gap-2">
+                      <div className="w-6 h-6 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-xs font-semibold">Buscando atletas...</span>
+                    </div>
+                  ) : usuariosBuscados.length === 0 ? (
+                    <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 px-4 space-y-2">
+                      <p className="text-xs font-bold text-slate-600">Nenhum atleta disponível encontrado</p>
+                      <p className="text-[11px] text-slate-450">
+                        {searchAtletaNome.trim().length >= 2
+                          ? `Não encontramos nenhum usuário com "${searchAtletaNome}".`
+                          : 'Você não possui outros amigos pendentes.'}
+                      </p>
+                      <p className="text-[10px] text-indigo-600 font-bold">
+                        Dica: Envie o link acima pelo WhatsApp para ele se cadastrar!
+                      </p>
+                    </div>
+                  ) : (
+                    usuariosBuscados.map((amigo) => (
+                      <div
+                        key={amigo.id}
+                        className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-150 shadow-2xs hover:border-slate-200 transition-all"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {amigo.foto ? (
+                            <img src={amigo.foto} alt={amigo.nome} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                              {amigo.nome.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-850 truncate leading-tight">{amigo.nome}</p>
+                            <p className="text-[10px] text-slate-450 truncate">{amigo.email}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await handleAddMembro(amigo);
+                            setUsuariosBuscados((prev) => prev.filter((u) => u.id !== amigo.id));
+                          }}
+                          className="px-3 py-1.5 bg-red-50 hover:bg-red-600 hover:text-white text-red-600 text-[11px] font-bold rounded-xl cursor-pointer border border-red-200 shadow-2xs transition-all flex items-center gap-1 shrink-0 active:scale-95"
+                          title="Convidar para o Grupo"
+                        >
+                          <UserPlus size={13} />
+                          <span>Convidar</span>
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Botão Concluir / Retornar */}
+                <div className="border-t border-slate-200 pt-3 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalTab('integrantes');
+                      setSearchAtletaNome('');
+                    }}
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex justify-center items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Check size={14} />
+                    <span>Concluir</span>
+                  </button>
+                </div>
+              </div>
             ) : (
+              /* ABA NORMAL: INTEGRANTES E AÇÕES DO GRUPO */
               <div className="flex justify-between items-start border-b border-slate-200 pb-3 mb-4 w-full">
                 <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
                   {selectedGrupo.foto ? (
@@ -1478,7 +1668,7 @@ export default function GruposList() {
               </div>
             )}
 
-            {loadingMembros ? (
+            {modalTab === 'integrantes' && (loadingMembros ? (
               <div className="flex justify-center items-center h-48 flex-1">
                 <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
               </div>
@@ -1564,17 +1754,33 @@ export default function GruposList() {
                   </div>
                 )}
 
-                {/* 2. INTEGRANTES DO GRUPO */}
+                {/* 2. INTEGRANTES DO GRUPO (Com botão para abrir aba de Adicionar Usuários) */}
                 <div className="space-y-2">
-                  <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
-                    Integrantes ({membrosAtivos.length})
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
+                      Integrantes ({membrosAtivos.length})
+                    </h3>
+                    {hasPermission('Incluir Usuario') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModalTab('adicionar');
+                          setSearchAtletaNome('');
+                        }}
+                        className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
+                      >
+                        <UserPlus size={12} />
+                        <span>+ Adicionar Usuários</span>
+                      </button>
+                    )}
+                  </div>
+
                   {membrosAtivos.length === 0 ? (
                     <p className="text-xs text-slate-450 py-3 text-center bg-slate-50 rounded-xl">
                       Nenhum integrante ativo.
                     </p>
                   ) : (
-                    <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1 no-scrollbar">
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1 no-scrollbar">
                       {membrosAtivos.map((m) => (
                         <div
                           key={m.id}
@@ -1634,132 +1840,73 @@ export default function GruposList() {
                   )}
                 </div>
 
-                {/* 3. CONVIDAR AMIGOS (Requer permissão de Incluir Usuário) */}
-                {hasPermission('Incluir Usuario') && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
-                        Convidar Amigos
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={() => handleShareGrupo(selectedGrupo)}
-                        className="text-[10px] font-extrabold text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
-                      >
-                        <Link2 size={12} />
-                        <span>Copiar Link</span>
-                      </button>
-                    </div>
+              </div>
+            ))}
 
-                    {/* Botão de Destaque: Compartilhar Link de Convite do Grupo */}
-                    <button
-                      type="button"
-                      onClick={() => handleShareGrupo(selectedGrupo)}
-                      className="w-full mb-3 py-2.5 px-3 bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.98]"
-                    >
-                      <Link2 size={16} className="text-indigo-600" />
-                      <span>Compartilhar Link de Convite (WhatsApp / Redes)</span>
-                    </button>
-                    {amigosParaAdicionar.length === 0 ? (
-                      <p className="text-xs text-slate-450 py-3 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                        Nenhum amigo pendente disponível.
-                      </p>
-                    ) : (
-                      <div className="space-y-2 max-h-36 overflow-y-auto no-scrollbar">
-                        {amigosParaAdicionar.map((amigo) => (
-                          <div key={amigo.id} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-150">
-                            <div className="flex items-center gap-2 min-w-0">
-                              {amigo.foto ? (
-                                <img src={amigo.foto} alt={amigo.nome} className="w-7 h-7 rounded-full object-cover" />
-                              ) : (
-                                <div className="w-7 h-7 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[10px]">
-                                  {amigo.nome.charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <p className="text-xs font-bold text-slate-800 truncate leading-tight">{amigo.nome}</p>
-                                <p className="text-[9px] text-slate-450 truncate">{amigo.email}</p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleAddMembro(amigo)}
-                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg cursor-pointer border border-red-100 shadow-xs"
-                              title="Adicionar ao Grupo"
-                            >
-                              <UserPlus size={14} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+            {/* Ações e Redirecionamentos (Apenas na aba integrantes) */}
+            {modalTab === 'integrantes' && (
+              <div className="border-t border-slate-200 pt-4 mt-4 space-y-2 flex-shrink-0">
+                {/* Atalho para Configurações de Permissões para o Proprietário */}
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      const gid = selectedGrupo.id;
+                      setSelectedGrupo(null);
+                      navigate(`/grupos/${gid}/configuracoes`);
+                    }}
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer transition-all border border-slate-200"
+                  >
+                    <Shield size={15} className="text-red-600" />
+                    <span>Configurações de Permissões</span>
+                  </button>
                 )}
 
+                <button
+                  onClick={() => {
+                    setSelectedGrupo(null);
+                    navigate(`/eventos?grupo_id=${selectedGrupo.id}`);
+                  }}
+                  className="w-full py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-red-500/10 active:scale-[0.98] transition-all"
+                >
+                  <CalendarRange size={15} />
+                  <span>Ver Partidas do Grupo</span>
+                </button>
+
+                {/* Criar Novo Evento (Requer permissão de Criar Evento) */}
+                {hasPermission('Criar Evento') && (
+                  <button
+                    onClick={() => {
+                      setSelectedGrupo(null);
+                      navigate(`/eventos/novo?grupo_id=${selectedGrupo.id}`);
+                    }}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-emerald-500/10 active:scale-[0.98] transition-all"
+                  >
+                    <Plus size={15} />
+                    <span>Criar Novo Evento</span>
+                  </button>
+                )}
+
+                <div className="pt-2 border-t border-dashed border-slate-200">
+                  {isAdmin ? (
+                    <button
+                      onClick={() => handleDeleteGroup(selectedGrupo.id)}
+                      className="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer active:scale-[0.98] transition-all border border-red-100"
+                    >
+                      <Trash2 size={15} />
+                      <span>Excluir Grupo</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleLeaveGroup(selectedGrupo.id)}
+                      className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer active:scale-[0.98] transition-all border border-slate-200"
+                    >
+                      <LogOut size={15} />
+                      <span>Sair do Grupo</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
-
-            {/* Ações e Redirecionamentos */}
-            <div className="border-t border-slate-200 pt-4 mt-4 space-y-2 flex-shrink-0">
-              {/* Atalho para Configurações de Permissões para o Proprietário */}
-              {isOwner && (
-                <button
-                  onClick={() => {
-                    const gid = selectedGrupo.id;
-                    setSelectedGrupo(null);
-                    navigate(`/grupos/${gid}/configuracoes`);
-                  }}
-                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer transition-all border border-slate-200"
-                >
-                  <Shield size={15} className="text-red-600" />
-                  <span>Configurações de Permissões</span>
-                </button>
-              )}
-
-              <button
-                onClick={() => {
-                  setSelectedGrupo(null);
-                  navigate(`/eventos?grupo_id=${selectedGrupo.id}`);
-                }}
-                className="w-full py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-red-500/10 active:scale-[0.98] transition-all"
-              >
-                <CalendarRange size={15} />
-                <span>Ver Partidas do Grupo</span>
-              </button>
-
-              {/* Criar Novo Evento (Requer permissão de Criar Evento) */}
-              {hasPermission('Criar Evento') && (
-                <button
-                  onClick={() => {
-                    setSelectedGrupo(null);
-                    navigate(`/eventos/novo?grupo_id=${selectedGrupo.id}`);
-                  }}
-                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-emerald-500/10 active:scale-[0.98] transition-all"
-                >
-                  <Plus size={15} />
-                  <span>Criar Novo Evento</span>
-                </button>
-              )}
-
-              <div className="pt-2 border-t border-dashed border-slate-200">
-                {isAdmin ? (
-                  <button
-                    onClick={() => handleDeleteGroup(selectedGrupo.id)}
-                    className="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer active:scale-[0.98] transition-all border border-red-100"
-                  >
-                    <Trash2 size={15} />
-                    <span>Excluir Grupo</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleLeaveGroup(selectedGrupo.id)}
-                    className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer active:scale-[0.98] transition-all border border-slate-200"
-                  >
-                    <LogOut size={15} />
-                    <span>Sair do Grupo</span>
-                  </button>
-                )}
-              </div>
-            </div>
 
           </div>
         </div>
