@@ -55,6 +55,10 @@ export interface EventoConfig {
   maxNumberOfVictories: number;
   actionAfterVictories: ActionAfterVictories;
   finalizado?: boolean;
+  limite_vagas?: number | null;
+  tem_limite_vagas?: boolean;
+  comunidade_id?: string;
+  historico_partidas?: any[];
 }
 
 export enum ActionAfterVictories {

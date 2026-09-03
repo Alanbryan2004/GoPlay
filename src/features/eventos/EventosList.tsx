@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Evento } from '../../types';
-import { Plus, Trash2, Calendar, MapPin, Search, ChevronRight, History, CheckCircle2, BookOpen } from 'lucide-react';
+import { Plus, Trash2, Calendar, MapPin, Search, ChevronRight, History, CheckCircle2, BookOpen, Users } from 'lucide-react';
 import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import Dialog from '../../components/common/Dialog';
@@ -393,6 +393,29 @@ export default function EventosList() {
                     <MapPin size={13} className="text-cyan-500 flex-shrink-0" />
                     <span className="truncate">{evento.local}</span>
                   </div>
+
+                  {/* Vagas e Confirmados */}
+                  {(() => {
+                    const limite = (evento.configuracao as any)?.limite_vagas;
+                    const confirmados = (evento.participantes || []).filter((p: any) => p.checked).length;
+                    const isCheio = limite && confirmados >= Number(limite);
+
+                    return (
+                      <div className="flex items-center gap-2 text-xs text-slate-500 pt-0.5">
+                        <div className="flex items-center gap-1 font-semibold text-slate-600">
+                          <Users size={12} className="text-amber-500 flex-shrink-0" />
+                          <span>
+                            {limite ? `${confirmados}/${limite} vagas` : `${confirmados} confirmados`}
+                          </span>
+                        </div>
+                        {isCheio && !evento.configuracao?.finalizado && (
+                          <span className="text-[9px] font-black uppercase tracking-wider text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded-md">
+                            Lotado
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="flex items-center gap-2">

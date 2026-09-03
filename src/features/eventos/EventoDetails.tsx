@@ -1194,7 +1194,23 @@ export default function EventoDetails() {
         }
       }
 
-      // 2. Montar objeto participante
+      // 2. Verificar limite de vagas se configurado
+      const limiteVagas = (config as any)?.limite_vagas ?? (evento.configuracao as any)?.limite_vagas;
+      const confirmadosCount = participantes.filter((p) => p.checked).length;
+      const jaEstavaConfirmado = participantes.some((p) => p.id === currentUserProfile.id && p.checked);
+
+      if (!jaEstavaConfirmado && limiteVagas && confirmadosCount >= Number(limiteVagas)) {
+        setDialog({
+          isOpen: true,
+          title: 'Vagas Esgotadas! 🚫',
+          message: `Desculpe, este evento atingiu o limite máximo de ${limiteVagas} vagas confirmadas. Fale com o organizador se precisar entrar na lista.`,
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+        return;
+      }
+
+      // 3. Montar objeto participante
       const novoParticipante: Participante = {
         id: currentUserProfile.id,
         nome: currentUserProfile.nome,
@@ -1208,7 +1224,7 @@ export default function EventoDetails() {
         derrotas: 0
       };
 
-      // 3. Atualizar lista de participantes
+      // 4. Atualizar lista de participantes
       let novosParticipantes = [...participantes];
       const index = novosParticipantes.findIndex(p => p.id === currentUserProfile.id);
       if (index >= 0) {
@@ -1461,6 +1477,27 @@ export default function EventoDetails() {
             <p className="text-xs text-slate-450 mt-1">
               {evento.local} • {dayjs(evento.data).format('DD/MM/YYYY [-] HH:mm')}
             </p>
+            {(() => {
+              const limite = (config as any)?.limite_vagas ?? (evento.configuracao as any)?.limite_vagas;
+              const confirmadosCount = participantes.filter((p) => p.checked).length;
+              const isCheio = limite && confirmadosCount >= Number(limite);
+
+              return (
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                    <Users size={12} className="text-amber-500" />
+                    <span>
+                      {limite ? `Vagas: ${confirmadosCount}/${limite}` : `${confirmadosCount} confirmados (Sem Limite)`}
+                    </span>
+                  </span>
+                  {isCheio && (
+                    <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-lg animate-pulse">
+                      🚫 Vagas Esgotadas
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -1501,18 +1538,23 @@ export default function EventoDetails() {
         (() => {
           const participanteLogado = participantes.find(p => p.id === currentUserProfile.id);
           const estaConfirmado = participanteLogado?.checked === true;
+          const limite = (config as any)?.limite_vagas ?? (evento.configuracao as any)?.limite_vagas;
+          const confirmadosCount = participantes.filter((p) => p.checked).length;
+          const isCheio = !estaConfirmado && limite && confirmadosCount >= Number(limite);
 
           return (
             <div className={`p-4 rounded-2xl border transition-all shadow-md flex flex-col sm:flex-row justify-between items-center gap-4 ${
               estaConfirmado 
                 ? 'bg-gradient-to-br from-emerald-50 to-teal-50/20 border-emerald-200 text-emerald-950'
+                : isCheio
+                ? 'bg-gradient-to-br from-rose-50/40 to-slate-50 border-rose-200'
                 : 'bg-gradient-to-br from-indigo-50/50 to-slate-50 border-slate-200'
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-inner flex-shrink-0 ${
-                  estaConfirmado ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                  estaConfirmado ? 'bg-emerald-100 text-emerald-700' : isCheio ? 'bg-rose-100 text-rose-650' : 'bg-slate-100 text-slate-500'
                 }`}>
-                  {estaConfirmado ? '✅' : '❓'}
+                  {estaConfirmado ? '✅' : isCheio ? '🚫' : '❓'}
                 </div>
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
@@ -1521,6 +1563,8 @@ export default function EventoDetails() {
                   <p className="text-[11px] font-bold text-slate-500 mt-0.5">
                     {estaConfirmado 
                       ? 'Confirmado! Você já está na fila/quadra de jogo.' 
+                      : isCheio
+                      ? `Vagas esgotadas (${confirmadosCount}/${limite} confirmados).`
                       : 'Ainda não confirmou. Clique no botão ao lado para confirmar!'
                     }
                   </p>
@@ -1534,6 +1578,13 @@ export default function EventoDetails() {
                     className="w-full sm:w-auto px-4 py-2 border border-rose-300 hover:border-rose-450 text-rose-650 hover:bg-rose-50 font-bold rounded-xl text-xs transition-all cursor-pointer bg-white"
                   >
                     Não vou jogar
+                  </button>
+                ) : isCheio ? (
+                  <button
+                    disabled
+                    className="w-full sm:w-auto px-5 py-2.5 bg-slate-200 text-slate-400 font-extrabold rounded-xl text-xs cursor-not-allowed border-0 shadow-none"
+                  >
+                    Vagas Esgotadas
                   </button>
                 ) : (
                   <button
@@ -2147,6 +2198,64 @@ export default function EventoDetails() {
                   onChange={(e) => setConfig({ ...config, useRating: e.target.checked })}
                   className="w-4 h-4 rounded text-red-600 bg-slate-800 border-slate-700"
                 />
+              </div>
+
+              {/* Ajuste de Vagas no Modal de Configurações */}
+              <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-left">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-700 uppercase">Limite de Vagas</span>
+                  <span className="text-[10px] font-bold text-slate-500">
+                    {(config as any)?.limite_vagas ? `${(config as any).limite_vagas} vagas` : 'Ilimitado'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfig({ ...config, limite_vagas: null, tem_limite_vagas: false } as any)}
+                    className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                      !(config as any)?.limite_vagas
+                        ? 'bg-red-600 border-red-600 text-white shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    ♾️ Ilimitado
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfig({ ...config, limite_vagas: (config as any)?.limite_vagas || 12, tem_limite_vagas: true } as any)}
+                    className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                      (config as any)?.limite_vagas
+                        ? 'bg-red-600 border-red-600 text-white shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    🎯 Limitar Vagas
+                  </button>
+                </div>
+                {(config as any)?.limite_vagas && (
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-xs text-slate-600 font-semibold">Total de Vagas:</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfig({ ...config, limite_vagas: Math.max(2, ((config as any)?.limite_vagas || 12) - 1) } as any)}
+                        className="w-7 h-7 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-750 flex items-center justify-center font-bold text-sm cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <span className="text-sm font-black text-slate-900 w-8 text-center">
+                        {(config as any)?.limite_vagas}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setConfig({ ...config, limite_vagas: ((config as any)?.limite_vagas || 12) + 1 } as any)}
+                        className="w-7 h-7 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-750 flex items-center justify-center font-bold text-sm cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
