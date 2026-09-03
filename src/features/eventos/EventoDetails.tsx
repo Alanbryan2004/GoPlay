@@ -34,6 +34,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'framer-motion';
+import { verificarPermissaoGrupo } from '../../utils/permissoesGrupo';
 
 export default function EventoDetails() {
   const { id } = useParams<{ id: string }>();
@@ -1524,7 +1525,22 @@ export default function EventoDetails() {
             <Trophy size={18} />
           </button>
           <button
-            onClick={() => setShowConfig(true)}
+            onClick={async () => {
+              if (evento.grupo_id && currentUserProfile) {
+                const canEdit = await verificarPermissaoGrupo(evento.grupo_id, currentUserProfile.id, 'Alterar Evento');
+                if (!canEdit) {
+                  setDialog({
+                    isOpen: true,
+                    title: 'Permissão Insuficiente 🚫',
+                    message: 'Você não possui permissão para alterar as configurações deste evento. Consulte o Administrador ou Proprietário do Grupo.',
+                    type: 'alert',
+                    onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+                  });
+                  return;
+                }
+              }
+              setShowConfig(true);
+            }}
             className="p-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-200 text-slate-600 rounded-xl transition-all shadow-md cursor-pointer"
             title="Configurações do evento"
           >

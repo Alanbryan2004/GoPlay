@@ -18,6 +18,7 @@ import {
 import dayjs from 'dayjs';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/utc';
+import { verificarPermissaoGrupo } from '../../utils/permissoesGrupo';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -213,13 +214,21 @@ export default function NovoEvento() {
         limite_vagas: temLimiteVagas ? Math.max(2, Number(limiteVagas)) : null,
       };
 
-      if (comunidadeId) {
-        defaultConfig.comunidade_id = comunidadeId;
+      const targetGrupoId = isPublico ? null : (selectedGrupoId || grupoId || null);
+
+      // Se for evento vinculado a grupo, validar permissão
+      if (targetGrupoId) {
+        const canCreate = await verificarPermissaoGrupo(targetGrupoId, resolvedUserId, 'Criar Evento');
+        if (!canCreate) {
+          setErro('Você não possui permissão para criar eventos neste grupo. Consulte o Proprietário ou Administrador.');
+          setLoading(false);
+          return;
+        }
       }
 
       const newEvento: Record<string, any> = {
         usuario_id: resolvedUserId,
-        grupo_id: isPublico ? null : (selectedGrupoId || grupoId || null),
+        grupo_id: targetGrupoId,
         descricao: descricao.trim(),
         local: local.trim(),
         modalidade_id: modalidadeId,

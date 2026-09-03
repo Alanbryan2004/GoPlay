@@ -6,6 +6,7 @@ import { Plus, Trash2, Calendar, MapPin, Search, ChevronRight, History, CheckCir
 import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import Dialog from '../../components/common/Dialog';
+import { verificarPermissaoGrupo } from '../../utils/permissoesGrupo';
 
 export default function EventosList() {
   const navigate = useNavigate();
@@ -215,9 +216,34 @@ export default function EventosList() {
     setDeletingId(id);
 
     try {
+      const eventoParaDeletar = [...eventos, ...historicoEventos].find((ev) => ev.id === id);
+      
+      // Se o evento pertencer a um grupo, validar permissão de exclusão
+      if (eventoParaDeletar?.grupo_id) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: userData } = await supabase.from('usuarios').select('id').eq('email', user.email).single();
+          const userId = userData?.id || user.id;
+
+          const canDelete = await verificarPermissaoGrupo(eventoParaDeletar.grupo_id, userId, 'Excluir Evento');
+          if (!canDelete) {
+            setDialog({
+              isOpen: true,
+              title: 'Permissão Insuficiente 🚫',
+              message: 'Você não possui permissão para excluir eventos deste grupo. Consulte o Proprietário.',
+              type: 'alert',
+              onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+            });
+            setDeletingId(null);
+            return;
+          }
+        }
+      }
+
       const { error } = await supabase.from('eventos').delete().eq('id', id);
       if (!error) {
         setEventos((prev) => prev.filter((ev) => ev.id !== id));
+        setHistoricoEventos((prev) => prev.filter((ev) => ev.id !== id));
       } else {
         setDialog({
           isOpen: true,

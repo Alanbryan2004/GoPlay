@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Grupo, Usuario } from '../../types';
-import { Plus, Users, X, UserMinus, UserPlus, CalendarRange, Settings, Check, Shield, Trash2, LogOut, Search } from 'lucide-react';
+import { Plus, Users, X, UserMinus, UserPlus, CalendarRange, Settings, Check, Shield, Trash2, LogOut, Search, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Dialog from '../../components/common/Dialog';
+import { getPermissoesGrupo, PERMISSOES_PADRAO } from '../../utils/permissoesGrupo';
+import type { PermissaoItem } from '../../utils/permissoesGrupo';
 
 export default function GruposList() {
   const navigate = useNavigate();
@@ -17,10 +19,11 @@ export default function GruposList() {
   const [creating, setCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Estados de Gerenciamento de Membros
+  // Estados de Gerenciamento de Membros e Permissões
   const [selectedGrupo, setSelectedGrupo] = useState<Grupo | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>('');
-  const [membros, setMembros] = useState<any[]>([]); // { id (membros_grupo row id), usuario_id, tipo_perfil, status, usuario: Usuario }
+  const [membros, setMembros] = useState<any[]>([]); // { id, usuario_id, tipo_perfil, status, usuario: Usuario, created_at }
+  const [groupPermissions, setGroupPermissions] = useState<PermissaoItem[]>([]);
   const [amigosParaAdicionar, setAmigosParaAdicionar] = useState<Usuario[]>([]);
   const [loadingMembros, setLoadingMembros] = useState(false);
   // Mapa de grupo_id -> contagem de solicitações de entrada pendentes (para grupos que o usuário administra)
@@ -230,6 +233,12 @@ export default function GruposList() {
     setEditGroupPublico(grupo.publico);
     setEditGroupFoto(grupo.foto || '');
     setIsEditingGroup(false);
+    
+    // Carregar permissões do grupo em segundo plano
+    getPermissoesGrupo(grupo.id).then((perms) => {
+      setGroupPermissions(perms);
+    }).catch((err) => console.error('Erro ao carregar permissoes:', err));
+
     await fetchMembersOfSelectedGroup(grupo.id);
   };
 
@@ -244,6 +253,7 @@ export default function GruposList() {
           usuario_id,
           tipo_perfil,
           status,
+          created_at,
           usuarios:usuario_id (
             id,
             nome,
@@ -782,6 +792,26 @@ export default function GruposList() {
     : null;
   const isAdmin = myMemSelected?.tipo_perfil === 'A';
 
+  // Identificar se o usuário logado é o Proprietário do Grupo
+  const isOwner = selectedGrupo ? (
+    ((selectedGrupo as any).criador_id && (selectedGrupo as any).criador_id === currentUserId) ||
+    (membros
+      .filter((m) => m.tipo_perfil === 'A' && m.status === 'aprovado')
+      .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())[0]?.usuario_id === currentUserId)
+  ) : false;
+
+  // Checar se o usuário atual tem uma permissão específica no grupo selecionado
+  const hasPermission = (nomePermissao: string) => {
+    if (isOwner) return true; // Proprietário tem poder absoluto irrestrito
+    if (!myMemSelected) return false;
+    const p = groupPermissions.find((item) => item.nome.toLowerCase() === nomePermissao.toLowerCase());
+    if (!p) {
+      const def = PERMISSOES_PADRAO.find((item) => item.nome.toLowerCase() === nomePermissao.toLowerCase());
+      return isAdmin ? Boolean(def?.defaultModerador) : Boolean(def?.defaultUsuario);
+    }
+    return isAdmin ? p.moderador : p.usuario;
+  };
+
   const membrosAtivos = membros.filter((m) => m.status === 'aprovado');
   const membrosPendentes = membros.filter((m) => m.status === 'pendente');
   const membrosConvidados = membros.filter((m) => m.status === 'convidado');
@@ -1290,12 +1320,25 @@ export default function GruposList() {
                       )}
                     </div>
                     <p className="text-[9px] font-bold text-slate-450 uppercase tracking-widest mt-0.5">
-                      {isAdmin ? 'Gerenciamento de Grupo (Admin)' : 'Integrantes do Grupo'}
+                      {isOwner ? 'Proprietário do Grupo' : isAdmin ? 'Administrador' : 'Integrante do Grupo'}
                     </p>
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-1 shrink-0">
+                  {isOwner && (
+                    <button
+                      onClick={() => {
+                        const gid = selectedGrupo.id;
+                        setSelectedGrupo(null);
+                        navigate(`/grupos/${gid}/configuracoes`);
+                      }}
+                      className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors cursor-pointer"
+                      title="Configurar Permissões de Usuário e Admin"
+                    >
+                      <Shield size={18} />
+                    </button>
+                  )}
                   {isAdmin && (
                     <button
                       onClick={() => setIsEditingGroup(true)}
@@ -1322,8 +1365,8 @@ export default function GruposList() {
             ) : (
               <div className="flex-1 overflow-y-auto space-y-4 pr-1 no-scrollbar">
                 
-                {/* 1. SOLICITAÇÕES PENDENTES (Aprovador/Admin libera entrada solicitada por membros) */}
-                {isAdmin && membrosPendentes.length > 0 && (
+                {/* 1. SOLICITAÇÕES PENDENTES (Requer permissão de Incluir Usuário ou ser Proprietário) */}
+                {hasPermission('Incluir Usuario') && membrosPendentes.length > 0 && (
                   <div className="bg-amber-50/40 p-3 rounded-2xl border border-amber-100 space-y-2">
                     <h3 className="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
@@ -1365,8 +1408,8 @@ export default function GruposList() {
                   </div>
                 )}
 
-                {/* 1.5. CONVITES ENVIADOS (Aguardando aceitação do amigo convidado) */}
-                {isAdmin && membrosConvidados.length > 0 && (
+                {/* 1.5. CONVITES ENVIADOS */}
+                {hasPermission('Incluir Usuario') && membrosConvidados.length > 0 && (
                   <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
                     <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
@@ -1390,7 +1433,7 @@ export default function GruposList() {
                           </div>
                           <button
                             onClick={() => handleRemoveMembro(m.id, m.usuario)}
-                            className="p-1.5 hover:bg-red-50 hover:text-red-650 rounded-lg text-slate-500 transition-colors cursor-pointer"
+                            className="p-1.5 hover:bg-red-50 hover:text-red-600 rounded-lg text-slate-500 transition-colors cursor-pointer"
                             title="Cancelar Convite"
                           >
                             <X size={14} />
@@ -1401,61 +1444,68 @@ export default function GruposList() {
                   </div>
                 )}
 
-                {/* 2. LISTA DE MEMBROS ATIVOS */}
-                <div>
-                  <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider mb-2">
-                    Membros Ativos ({membrosAtivos.length})
+                {/* 2. INTEGRANTES DO GRUPO */}
+                <div className="space-y-2">
+                  <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
+                    Integrantes ({membrosAtivos.length})
                   </h3>
                   {membrosAtivos.length === 0 ? (
-                    <p className="text-xs text-slate-650 py-2 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                      Nenhum membro ativo no grupo.
+                    <p className="text-xs text-slate-450 py-3 text-center bg-slate-50 rounded-xl">
+                      Nenhum integrante ativo.
                     </p>
                   ) : (
-                    <div className="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1 no-scrollbar">
                       {membrosAtivos.map((m) => (
-                        <div key={m.id} className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-150">
-                          <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          key={m.id}
+                          className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-150 shadow-2xs hover:border-slate-200 transition-all"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             {m.usuario.foto ? (
-                              <img src={m.usuario.foto} alt={m.usuario.nome} className="w-7 h-7 rounded-full object-cover" />
+                              <img src={m.usuario.foto} alt={m.usuario.nome} className="w-7 h-7 rounded-full object-cover shrink-0" />
                             ) : (
-                              <div className="w-7 h-7 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[10px]">
+                              <div className="w-7 h-7 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
                                 {m.usuario.nome.charAt(0).toUpperCase()}
                               </div>
                             )}
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <p className="text-xs font-bold text-slate-800 truncate leading-tight">{m.usuario.nome}</p>
-                                {m.usuario_id === currentUserId && (
-                                  <span className="text-[8px] bg-slate-200 text-slate-700 font-bold px-1 rounded uppercase tracking-wider shrink-0">Você</span>
-                                )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-slate-850 truncate leading-tight">
+                                {m.usuario.nome}
+                                {m.usuario_id === currentUserId && <span className="text-[9px] text-slate-400 font-normal ml-1">(Você)</span>}
+                              </p>
+                              <p className="text-[9px] text-slate-400 font-semibold truncate flex items-center gap-1">
                                 {m.tipo_perfil === 'A' ? (
-                                  <span className="text-[8px] bg-red-50 text-[#eb3237] border border-red-100 font-extrabold px-1 rounded uppercase tracking-wider shrink-0">Admin</span>
+                                  <span className="text-red-600 font-bold flex items-center gap-0.5">
+                                    <Shield size={10} /> Admin
+                                  </span>
                                 ) : (
-                                  <span className="text-[8px] bg-slate-100 text-slate-500 border border-slate-200 font-bold px-1 rounded uppercase tracking-wider shrink-0">Membro</span>
+                                  'Membro'
                                 )}
-                              </div>
-                              <p className="text-[9px] text-slate-450 truncate">{m.usuario.email}</p>
+                              </p>
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center gap-1 shrink-0">
-                            {isAdmin && m.usuario_id !== currentUserId && (
-                              <>
-                                <button
-                                  onClick={() => handleToggleMemberRole(m.id, m.tipo_perfil)}
-                                  className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors cursor-pointer"
-                                  title={m.tipo_perfil === 'A' ? 'Mudar para Membro Comum' : 'Promover a Administrador'}
-                                >
-                                  <Shield size={14} className={m.tipo_perfil === 'A' ? 'text-red-500' : 'text-slate-400'} />
-                                </button>
-                                <button
-                                  onClick={() => handleRemoveMembro(m.id, m.usuario)}
-                                  className="p-1.5 hover:bg-red-50 hover:text-red-650 rounded-lg text-slate-500 transition-colors cursor-pointer"
-                                  title="Remover do Grupo"
-                                >
-                                  <UserMinus size={14} />
-                                </button>
-                              </>
+                            {/* Alterar cargo (Apenas Proprietário) */}
+                            {isOwner && m.usuario_id !== currentUserId && (
+                              <button
+                                onClick={() => handleToggleMemberRole(m.id, m.tipo_perfil)}
+                                className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors cursor-pointer"
+                                title={m.tipo_perfil === 'A' ? 'Mudar para Membro Comum' : 'Promover a Administrador'}
+                              >
+                                <Shield size={14} className={m.tipo_perfil === 'A' ? 'text-red-500' : 'text-slate-400'} />
+                              </button>
+                            )}
+                            
+                            {/* Remover Membro (Apenas quem tem permissão de Excluir Usuário) */}
+                            {hasPermission('Excluir Usuario') && m.usuario_id !== currentUserId && (
+                              <button
+                                onClick={() => handleRemoveMembro(m.id, m.usuario)}
+                                className="p-1.5 hover:bg-red-50 hover:text-red-600 rounded-lg text-slate-500 transition-colors cursor-pointer"
+                                title="Remover do Grupo"
+                              >
+                                <UserMinus size={14} />
+                              </button>
                             )}
                           </div>
                         </div>
@@ -1464,8 +1514,8 @@ export default function GruposList() {
                   )}
                 </div>
 
-                {/* 3. CONVIDAR AMIGOS */}
-                {isAdmin && (
+                {/* 3. CONVIDAR AMIGOS (Requer permissão de Incluir Usuário) */}
+                {hasPermission('Incluir Usuario') && (
                   <div>
                     <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider mb-2">
                       Convidar Amigos
@@ -1493,7 +1543,7 @@ export default function GruposList() {
                             </div>
                             <button
                               onClick={() => handleAddMembro(amigo)}
-                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-650 rounded-lg cursor-pointer border border-red-100 shadow-xs"
+                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg cursor-pointer border border-red-100 shadow-xs"
                               title="Adicionar ao Grupo"
                             >
                               <UserPlus size={14} />
@@ -1510,27 +1560,45 @@ export default function GruposList() {
 
             {/* Ações e Redirecionamentos */}
             <div className="border-t border-slate-200 pt-4 mt-4 space-y-2 flex-shrink-0">
+              {/* Atalho para Configurações de Permissões para o Proprietário */}
+              {isOwner && (
+                <button
+                  onClick={() => {
+                    const gid = selectedGrupo.id;
+                    setSelectedGrupo(null);
+                    navigate(`/grupos/${gid}/configuracoes`);
+                  }}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer transition-all border border-slate-200"
+                >
+                  <Shield size={15} className="text-red-600" />
+                  <span>Configurações de Permissões</span>
+                </button>
+              )}
+
               <button
                 onClick={() => {
                   setSelectedGrupo(null);
                   navigate(`/eventos?grupo_id=${selectedGrupo.id}`);
                 }}
-                className="w-full py-2.5 bg-gradient-to-r from-[#eb3237] to-red-650 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-red-500/10 active:scale-[0.98] transition-all"
+                className="w-full py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-red-500/10 active:scale-[0.98] transition-all"
               >
                 <CalendarRange size={15} />
                 <span>Ver Partidas do Grupo</span>
               </button>
 
-              <button
-                onClick={() => {
-                  setSelectedGrupo(null);
-                  navigate(`/eventos/novo?grupo_id=${selectedGrupo.id}`);
-                }}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-emerald-500/10 active:scale-[0.98] transition-all"
-              >
-                <Plus size={15} />
-                <span>Criar Novo Evento</span>
-              </button>
+              {/* Criar Novo Evento (Requer permissão de Criar Evento) */}
+              {hasPermission('Criar Evento') && (
+                <button
+                  onClick={() => {
+                    setSelectedGrupo(null);
+                    navigate(`/eventos/novo?grupo_id=${selectedGrupo.id}`);
+                  }}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-emerald-500/10 active:scale-[0.98] transition-all"
+                >
+                  <Plus size={15} />
+                  <span>Criar Novo Evento</span>
+                </button>
+              )}
 
               <div className="pt-2 border-t border-dashed border-slate-200">
                 {isAdmin ? (

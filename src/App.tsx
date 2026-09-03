@@ -19,6 +19,7 @@ import SorteioQuick from './features/eventos/SorteioQuick';
 
 // Other Feature Pages
 import GruposList from './features/grupos/GruposList';
+import GrupoConfiguracoes from './features/grupos/GrupoConfiguracoes';
 import RankingList from './features/ranking/RankingList';
 import AmigosList from './features/amigos/AmigosList';
 import MensagensPage from './features/mensagens/MensagensPage';
@@ -79,6 +80,7 @@ function AppContent() {
           <Route path="/sorteio" element={<SorteioQuick />} />
           
           <Route path="/grupos" element={<GruposList />} />
+          <Route path="/grupos/:id/configuracoes" element={<GrupoConfiguracoes />} />
           <Route path="/ranking" element={<RankingList />} />
           <Route path="/amigos" element={<AmigosList />} />
           <Route path="/mensagens" element={<MensagensPage />} />
