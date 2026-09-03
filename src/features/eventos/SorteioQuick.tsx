@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import type { Participante } from '../../types';
+import {
+  sortearTimes,
+  subirPrioridade,
+  selecionarProximosJogadores
+} from '../../utils/sorteioUtils';
 import {
   Sparkles,
   RefreshCw,
@@ -11,22 +17,15 @@ import {
   Plus,
   X,
   Star,
-  Info,
   AlertTriangle,
   Minus,
   CheckCircle2,
   Users,
   Trophy,
-  History,
-  ArrowRight
+  History
 } from 'lucide-react';
 
-interface Member {
-  id: string;
-  nome: string;
-  foto?: string;
-  avaliacao: number;
-  checked: boolean;
+interface QuickParticipante extends Participante {
   isAvulso?: boolean;
 }
 
@@ -34,7 +33,7 @@ interface PartidaHistorico {
   numero: number;
   placarA: number;
   placarB: number;
-  vencedor: 'A' | 'B' | 'empate';
+  vencedor: 'A' | 'B';
   timeA: string[];
   timeB: string[];
 }
@@ -47,8 +46,8 @@ export default function SorteioQuick() {
   const [selectedGrupoId, setSelectedGrupoId] = useState<string>('avulso');
   const [loadingGrupos, setLoadingGrupos] = useState(true);
 
-  // Lista de membros do sorteio
-  const [membros, setMembros] = useState<Member[]>([]);
+  // Lista unificada de participantes (com prioridade idêntica ao Evento)
+  const [participantes, setParticipantes] = useState<QuickParticipante[]>([]);
   const [search, setSearch] = useState('');
 
   // Adicionar novo jogador
@@ -60,9 +59,8 @@ export default function SorteioQuick() {
   const [sortMode, setSortMode] = useState<'balanced' | 'random'>('balanced');
 
   // Estado da Partida Ativa (Estilo Evento)
-  const [timeA, setTimeA] = useState<Member[]>([]);
-  const [timeB, setTimeB] = useState<Member[]>([]);
-  const [filaEspera, setFilaEspera] = useState<Member[]>([]);
+  const [timeA, setTimeA] = useState<QuickParticipante[]>([]);
+  const [timeB, setTimeB] = useState<QuickParticipante[]>([]);
   const [placarA, setPlacarA] = useState(0);
   const [placarB, setPlacarB] = useState(0);
   const [vitoriasA, setVitoriasA] = useState(0);
@@ -143,7 +141,7 @@ export default function SorteioQuick() {
           });
         }
 
-        const parsedMembros: Member[] = (membersData
+        const parsedMembros: QuickParticipante[] = (membersData
           .map((m: any) => {
             const u = m.usuarios;
             if (!u) return null;
@@ -153,13 +151,14 @@ export default function SorteioQuick() {
               foto: u.foto || undefined,
               avaliacao: ratingMap.get(u.id) ?? 3.0,
               checked: true,
+              prioridade: 0,
               isAvulso: false,
             };
           })
-          .filter(Boolean) as Member[])
+          .filter(Boolean) as QuickParticipante[])
           .sort((a, b) => a.nome.localeCompare(b.nome));
 
-        setMembros((prev) => {
+        setParticipantes((prev) => {
           const avulsos = prev.filter((m) => m.isAvulso);
           return [...parsedMembros, ...avulsos];
         });
@@ -174,88 +173,71 @@ export default function SorteioQuick() {
     const nomeLimpo = novoNome.trim();
     if (!nomeLimpo) return;
 
-    const novoJogador: Member = {
+    const novoJogador: QuickParticipante = {
       id: `avulso_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       nome: nomeLimpo,
       avaliacao: novaAvaliacao,
       checked: true,
+      prioridade: 0,
       isAvulso: true,
     };
 
-    if (isJogoAtivo) {
-      // Se o jogo já está rolando, adiciona direto na fila de espera
-      setFilaEspera((prev) => [...prev, novoJogador]);
-    }
-
-    setMembros((prev) => [...prev, novoJogador]);
+    setParticipantes((prev) => [...prev, novoJogador]);
     setNovoNome('');
   };
 
   const handleRemoverJogador = (id: string) => {
-    setMembros((prev) => prev.filter((m) => m.id !== id));
-    setFilaEspera((prev) => prev.filter((m) => m.id !== id));
+    setParticipantes((prev) => prev.filter((m) => m.id !== id));
     setTimeA((prev) => prev.filter((m) => m.id !== id));
     setTimeB((prev) => prev.filter((m) => m.id !== id));
   };
 
   const toggleMemberChecked = (id: string) => {
-    setMembros((prev) =>
+    setParticipantes((prev) =>
       prev.map((m) => (m.id === id ? { ...m, checked: !m.checked } : m))
     );
   };
 
   const toggleAllMembers = (checked: boolean) => {
-    setMembros((prev) => prev.map((m) => ({ ...m, checked })));
+    setParticipantes((prev) => prev.map((m) => ({ ...m, checked })));
   };
 
-  // Realiza o Sorteio Inicial dos Times
+  // Sorteio Inicial aplicando exatamente a regra do Evento
   const handleSortear = () => {
-    const presentes = membros.filter((m) => m.checked);
+    const presentes = participantes.filter((m) => m.checked);
     
     if (presentes.length < 2) {
-      alert('Adicione pelo menos 2 jogadores presentes para realizar o sorteio.');
+      alert('Adicione ou selecione pelo menos 2 jogadores presentes para realizar o sorteio.');
       return;
     }
 
     setIsDrawing(true);
 
     setTimeout(() => {
-      let candidates = [...presentes];
+      // Determina tamanho balanceado por time (para nunca ficar 6 contra 1 caso haja poucos atletas)
+      const tamanhoEfetivo = Math.min(playersPerTeam, Math.floor(presentes.length / 2));
 
-      if (sortMode === 'balanced') {
-        candidates.sort((a, b) => b.avaliacao - a.avaliacao);
-      } else {
-        candidates.sort(() => Math.random() - 0.5);
-      }
+      // Aplica sortearTimes oficial do Evento
+      const timesSorteados = sortearTimes(presentes, tamanhoEfetivo, 2);
 
-      const maxPlayers = playersPerTeam * 2;
-      const sortingPool = candidates.slice(0, Math.min(candidates.length, maxPlayers));
-      const poolExcluidos = candidates.slice(sortingPool.length);
+      const tA = (timesSorteados[0] || []).map((p) => ({ ...p, prioridade: 0 }));
+      const tB = (timesSorteados[1] || []).map((p) => ({ ...p, prioridade: 0 }));
 
-      const localTimeA: Member[] = [];
-      const localTimeB: Member[] = [];
+      // Quem ficou de fora inicialmente recebe prioridade 1 (igual ao Cenário 01 do Evento)
+      const jogandoIds = new Set([...tA.map((p) => p.id), ...tB.map((p) => p.id)]);
+      const listaComPrioridade: QuickParticipante[] = participantes.map((p) => {
+        if (p.checked) {
+          return {
+            ...p,
+            prioridade: jogandoIds.has(p.id) ? 0 : 1,
+          };
+        }
+        return p;
+      });
 
-      if (sortMode === 'balanced') {
-        sortingPool.forEach((player, index) => {
-          const round = Math.floor(index / 2);
-          if (round % 2 === 0) {
-            if (index % 2 === 0) localTimeA.push(player);
-            else localTimeB.push(player);
-          } else {
-            if (index % 2 === 0) localTimeB.push(player);
-            else localTimeA.push(player);
-          }
-        });
-      } else {
-        sortingPool.forEach((player, index) => {
-          if (index % 2 === 0) localTimeA.push(player);
-          else localTimeB.push(player);
-        });
-      }
-
-      setTimeA(localTimeA);
-      setTimeB(localTimeB);
-      setFilaEspera(poolExcluidos);
+      setTimeA(tA);
+      setTimeB(tB);
+      setParticipantes(listaComPrioridade);
       setPlacarA(0);
       setPlacarB(0);
       setVitoriasA(0);
@@ -266,64 +248,58 @@ export default function SorteioQuick() {
     }, 1000);
   };
 
-  // Finalizar a partida ativa e aplicar a dinâmica do rodízio (Quem ganha fica)
+  // Finalizar a partida ativa aplicando exatamente a regra e prioridades do Evento
   const handleFinalizarPartida = () => {
-    let vencedor: 'A' | 'B' | 'empate' = 'empate';
-    if (placarA > placarB) vencedor = 'A';
-    if (placarB > placarA) vencedor = 'B';
+    if (placarA === placarB) {
+      alert('A partida terminou empatada! Marque o ponto de desempate para finalizar.');
+      return;
+    }
 
-    // Grava no histórico
+    const time1Venceu = placarA > placarB;
+    const timeVencedor = time1Venceu ? timeA : timeB;
+    const timePerdedor = time1Venceu ? timeB : timeA;
+
+    // 1. Grava no histórico
     const novaPartida: PartidaHistorico = {
       numero: numeroPartida,
       placarA,
       placarB,
-      vencedor,
+      vencedor: time1Venceu ? 'A' : 'B',
       timeA: timeA.map((p) => p.nome),
       timeB: timeB.map((p) => p.nome),
     };
-
     setHistoricoPartidas((prev) => [...prev, novaPartida]);
 
-    // Se houver fila de espera, faz o rodízio
-    if (filaEspera.length > 0) {
-      const quantidadeNecessaria = playersPerTeam;
-      const novosEntrantes = filaEspera.slice(0, quantidadeNecessaria);
-      const restanteFila = filaEspera.slice(quantidadeNecessaria);
+    // 2. Aplica subirPrioridade e selecionarProximosJogadores idêntico ao Evento
+    let novosParticipantes = subirPrioridade(participantes, timeVencedor, timePerdedor);
 
-      if (vencedor === 'A') {
-        // Time A venceu: Time A fica, Time B vai para o final da fila, novos entrantes formam o Time B
-        setVitoriasA((v) => v + 1);
-        setVitoriasB(0);
-        setTimeB(novosEntrantes);
-        setFilaEspera([...restanteFila, ...timeB]);
-      } else if (vencedor === 'B') {
-        // Time B venceu: Time B fica, Time A vai para o final da fila, novos entrantes formam o Time A
-        setVitoriasB((v) => v + 1);
-        setVitoriasA(0);
-        setTimeA(novosEntrantes);
-        setFilaEspera([...restanteFila, ...timeA]);
-      } else {
-        // Empate: Time A fica (ou o que tinha mais vitórias) e Time B vai para a fila
-        if (vitoriasB > vitoriasA) {
-          setTimeA(novosEntrantes);
-          setFilaEspera([...restanteFila, ...timeA]);
-        } else {
-          setTimeB(novosEntrantes);
-          setFilaEspera([...restanteFila, ...timeB]);
-        }
-      }
+    // O tamanho do time entrante deve ser EXATAMENTE igual ao time que venceu
+    const tamanhoDoTime = timeVencedor.length;
+
+    const { selecionados: novoTime, novosParticipantes: finalParticipantes } = selecionarProximosJogadores(
+      novosParticipantes,
+      timeVencedor,
+      tamanhoDoTime
+    );
+
+    const activeNovoTime = novoTime.map((p) => ({ ...p, prioridade: 0 }));
+    activeNovoTime.sort((a, b) => a.nome.localeCompare(b.nome));
+
+    const activeVencedor = timeVencedor.map((p) => ({ ...p, prioridade: 0 }));
+
+    if (time1Venceu) {
+      setTimeA(activeVencedor);
+      setTimeB(activeNovoTime);
+      setVitoriasA((v) => v + 1);
+      setVitoriasB(0);
     } else {
-      // Sem fila de espera: apenas atualiza o contador de vitórias
-      if (vencedor === 'A') {
-        setVitoriasA((v) => v + 1);
-        setVitoriasB(0);
-      } else if (vencedor === 'B') {
-        setVitoriasB((v) => v + 1);
-        setVitoriasA(0);
-      }
+      setTimeA(activeNovoTime);
+      setTimeB(activeVencedor);
+      setVitoriasA(0);
+      setVitoriasB((v) => v + 1);
     }
 
-    // Zera os placares para o próximo confronto e avança a rodada
+    setParticipantes(finalParticipantes as QuickParticipante[]);
     setPlacarA(0);
     setPlacarB(0);
     setNumeroPartida((n) => n + 1);
@@ -332,8 +308,8 @@ export default function SorteioQuick() {
   // Reequilibrar os times em quadra
   const handleReequilibrarEmQuadra = () => {
     const todosEmQuadra = [...timeA, ...timeB].sort((a, b) => b.avaliacao - a.avaliacao);
-    const novoA: Member[] = [];
-    const novoB: Member[] = [];
+    const novoA: QuickParticipante[] = [];
+    const novoB: QuickParticipante[] = [];
 
     todosEmQuadra.forEach((p, idx) => {
       if (idx % 2 === 0) novoA.push(p);
@@ -345,7 +321,7 @@ export default function SorteioQuick() {
   };
 
   // Trocar jogador de time manualmente
-  const handleTrocarDeTime = (jogador: Member, deTime: 'A' | 'B') => {
+  const handleTrocarDeTime = (jogador: QuickParticipante, deTime: 'A' | 'B') => {
     if (deTime === 'A') {
       setTimeA((prev) => prev.filter((p) => p.id !== jogador.id));
       setTimeB((prev) => [...prev, jogador]);
@@ -356,18 +332,34 @@ export default function SorteioQuick() {
   };
 
   // Mover jogador da quadra para a fila
-  const handleMoverParaFila = (jogador: Member, deTime: 'A' | 'B') => {
+  const handleMoverParaFila = (jogador: QuickParticipante, deTime: 'A' | 'B') => {
     if (deTime === 'A') setTimeA((prev) => prev.filter((p) => p.id !== jogador.id));
     else setTimeB((prev) => prev.filter((p) => p.id !== jogador.id));
-    setFilaEspera((prev) => [...prev, jogador]);
+
+    setParticipantes((prev) =>
+      prev.map((p) => (p.id === jogador.id ? { ...p, prioridade: 1 } : p))
+    );
   };
 
   // Colocar jogador da fila no time
-  const handleColocarEmQuadra = (jogador: Member, paraTime: 'A' | 'B') => {
-    setFilaEspera((prev) => prev.filter((p) => p.id !== jogador.id));
-    if (paraTime === 'A') setTimeA((prev) => [...prev, jogador]);
-    else setTimeB((prev) => [...prev, jogador]);
+  const handleColocarEmQuadra = (jogador: QuickParticipante, paraTime: 'A' | 'B') => {
+    setParticipantes((prev) =>
+      prev.map((p) => (p.id === jogador.id ? { ...p, prioridade: 0 } : p))
+    );
+    if (paraTime === 'A') setTimeA((prev) => [...prev, { ...jogador, prioridade: 0 }]);
+    else setTimeB((prev) => [...prev, { ...jogador, prioridade: 0 }]);
   };
+
+  // Jogadores na fila de espera (presentes que não estão no Time A nem no Time B)
+  const jogandoIds = new Set([...timeA.map((p) => p.id), ...timeB.map((p) => p.id)]);
+  const filaEspera = participantes.filter((p) => p.checked && !jogandoIds.has(p.id));
+
+  // Estimativa do próximo time usando a regra oficial do Evento
+  const { selecionados: proximoTimeEstimado } = selecionarProximosJogadores(
+    participantes,
+    [...timeA, ...timeB],
+    timeA.length || playersPerTeam
+  );
 
   // Compartilhar placar atual
   const handleCopiarTextoPartida = () => {
@@ -425,7 +417,7 @@ export default function SorteioQuick() {
     }
   };
 
-  const filteredMembros = membros.filter((m) =>
+  const filteredMembros = participantes.filter((m) =>
     m.nome.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -435,9 +427,6 @@ export default function SorteioQuick() {
   const totalStarsB = timeB.reduce((sum, p) => sum + p.avaliacao, 0);
   const avgStarsB = timeB.length > 0 ? (totalStarsB / timeB.length).toFixed(1) : '0.0';
   const starDiff = Math.abs(totalStarsA - totalStarsB).toFixed(1);
-
-  // Próximo time estimado da fila
-  const proximoTimeEstimado = filaEspera.slice(0, playersPerTeam);
 
   return (
     <div className="px-4 py-3 pb-24 w-full max-w-md mx-auto relative min-h-[calc(100vh-8rem)]">
@@ -698,9 +687,9 @@ export default function SorteioQuick() {
                   <span>Próximos na Fila ({filaEspera.length})</span>
                 </h3>
                 <span className="text-[10px] font-bold text-slate-400">
-                  {filaEspera.length >= playersPerTeam
-                    ? `Próximo time completo (${playersPerTeam} atletas prontos para entrar)`
-                    : `Faltam ${playersPerTeam - filaEspera.length} para fechar o próximo time`}
+                  {filaEspera.length >= timeA.length
+                    ? `Próximo time completo (${timeA.length} atletas prontos para entrar)`
+                    : `Aguardando na fila de revezamento`}
                 </span>
               </div>
 
@@ -708,7 +697,18 @@ export default function SorteioQuick() {
               {filaEspera.length > 1 && (
                 <button
                   type="button"
-                  onClick={() => setFilaEspera((prev) => [...prev].sort(() => Math.random() - 0.5))}
+                  onClick={() => {
+                    const embaralhada = [...filaEspera].sort(() => Math.random() - 0.5);
+                    const embIds = new Set(embaralhada.map((p) => p.id));
+                    setParticipantes((prev) =>
+                      prev.map((p) => {
+                        if (embIds.has(p.id)) {
+                          return { ...p, prioridade: 1 };
+                        }
+                        return p;
+                      })
+                    );
+                  }}
                   className="text-[10px] font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 cursor-pointer"
                 >
                   <RefreshCw size={10} />
@@ -717,11 +717,11 @@ export default function SorteioQuick() {
               )}
             </div>
 
-            {/* Estimativa do Próximo Time */}
+            {/* Estimativa do Próximo Time (com algoritmo do Evento) */}
             {proximoTimeEstimado.length > 0 && (
               <div className="p-2.5 bg-amber-50/60 rounded-2xl border border-amber-200 space-y-1.5">
                 <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider block">
-                  ⚡ Entram no Próximo Jogo ({proximoTimeEstimado.length}/{playersPerTeam})
+                  ⚡ Entram no Próximo Jogo ({proximoTimeEstimado.length}/{timeA.length})
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {proximoTimeEstimado.map((p, idx) => (
@@ -802,10 +802,9 @@ export default function SorteioQuick() {
                       🔴 {hp.placarA} x {hp.placarB} 🔵
                     </span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${
-                      hp.vencedor === 'A' ? 'bg-red-100 text-red-700 font-black' :
-                      hp.vencedor === 'B' ? 'bg-blue-100 text-blue-700 font-black' : 'bg-slate-200 text-slate-700 font-bold'
+                      hp.vencedor === 'A' ? 'bg-red-100 text-red-700 font-black' : 'bg-blue-100 text-blue-700 font-black'
                     }`}>
-                      {hp.vencedor === 'A' ? 'Vitória Time A' : hp.vencedor === 'B' ? 'Vitória Time B' : 'Empate'}
+                      {hp.vencedor === 'A' ? 'Vitória Time A' : 'Vitória Time B'}
                     </span>
                   </div>
                 ))}
@@ -919,10 +918,10 @@ export default function SorteioQuick() {
             <div className="flex justify-between items-center border-b border-slate-200 pb-2">
               <div>
                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">
-                  Lista de Atletas ({membros.length})
+                  Lista de Atletas ({participantes.length})
                 </h3>
                 <span className="text-[10px] font-bold text-slate-400 block mt-0.5">
-                  Presentes: {membros.filter((m) => m.checked).length} (Necessários: {playersPerTeam * 2})
+                  Presentes: {participantes.filter((m) => m.checked).length} (Necessários: {playersPerTeam * 2})
                 </span>
               </div>
 
@@ -942,12 +941,12 @@ export default function SorteioQuick() {
                 >
                   Nenhum
                 </button>
-                {membros.length > 0 && (
+                {participantes.length > 0 && (
                   <>
                     <span className="text-slate-300 text-[10px]">|</span>
                     <button
                       type="button"
-                      onClick={() => setMembros([])}
+                      onClick={() => setParticipantes([])}
                       className="text-[10px] font-extrabold text-red-500 hover:underline cursor-pointer"
                     >
                       Limpar
@@ -957,7 +956,7 @@ export default function SorteioQuick() {
               </div>
             </div>
 
-            {membros.length > 6 && (
+            {participantes.length > 6 && (
               <input
                 type="text"
                 placeholder="Filtrar por nome..."
@@ -1019,7 +1018,7 @@ export default function SorteioQuick() {
           {/* Botão de Sortear Inicial */}
           <button
             onClick={handleSortear}
-            disabled={isDrawing || membros.filter((m) => m.checked).length < 2}
+            disabled={isDrawing || participantes.filter((m) => m.checked).length < 2}
             className="w-full py-3.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white font-black rounded-2xl shadow-lg active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs flex justify-center items-center gap-2 cursor-pointer shadow-red-500/20"
           >
             {isDrawing ? (
@@ -1069,7 +1068,6 @@ export default function SorteioQuick() {
                 onClick={() => {
                   setTimeA([]);
                   setTimeB([]);
-                  setFilaEspera([]);
                   setShowEncerrarModal(false);
                 }}
                 className="flex-1 py-2.5 bg-red-650 hover:bg-red-700 text-white font-black rounded-xl text-xs cursor-pointer shadow-sm"

@@ -318,4 +318,34 @@ describe('Algoritmo de Prioridades de Sorteio (Cenários 1, 2, 3 e 4)', () => {
       expect(p?.prioridade).toBe(0);
     });
   });
+
+  it('Cenário 05: Fila com menos jogadores que o tamanho do time (ex: 7 jogadores totais e jogo de 6)', () => {
+    // 6 jogando no Time A, 6 jogando no Time B, e 1 esperando na fila (Total 13 jogadores)
+    const timeA = Array.from({ length: 6 }, (_, i) => createPlayer(`A${i + 1}`, `Jogador A${i + 1}`, 0));
+    const timeB = Array.from({ length: 6 }, (_, i) => createPlayer(`B${i + 1}`, `Jogador B${i + 1}`, 0));
+    const filaReserva = [createPlayer('R1', 'Reserva 1', 1)];
+
+    let participantes: Participante[] = [...timeA, ...timeB, ...filaReserva];
+
+    // Time A vence. Time B perde e sai para a fila.
+    participantes = subirPrioridade(participantes, timeA, timeB);
+
+    // O reserva R1 tem prioridade 1. O Time B que saiu assume prioridade 2.
+    // Agora precisamos selecionar 6 jogadores para formar o novo Time B contra o Time A:
+    const { selecionados, novosParticipantes } = selecionarProximosJogadores(participantes, timeA, 6);
+
+    // O novo time deve ter EXATAMENTE 6 jogadores!
+    expect(selecionados.length).toBe(6);
+    // Reserva 1 deve obrigatoriamente ter entrado
+    expect(selecionados.some(s => s.id === 'R1')).toBe(true);
+
+    // Os outros 5 jogadores devem vir do Time B que acabou de perder
+    const entrantesDoTimeB = selecionados.filter(s => s.id.startsWith('B'));
+    expect(entrantesDoTimeB.length).toBe(5);
+
+    // O 1 jogador do Time B que ficou de fora deve permanecer na fila
+    const queFicouDeFora = novosParticipantes.filter(p => !timeA.some(t => t.id === p.id) && !selecionados.some(s => s.id === p.id));
+    expect(queFicouDeFora.length).toBe(1);
+    expect(queFicouDeFora[0].id.startsWith('B')).toBe(true);
+  });
 });
