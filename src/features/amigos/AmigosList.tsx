@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Usuario } from '../../types';
-import { UserPlus, UserCheck, MessageSquare, Search, Clock, X } from 'lucide-react';
+import { UserPlus, UserCheck, MessageSquare, Search, Clock, X, Users } from 'lucide-react';
 import Dialog from '../../components/common/Dialog';
 
 export default function AmigosList() {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'amigos' | 'adicionar'>('amigos');
   const [users, setUsers] = useState<Usuario[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [amizades, setAmizades] = useState<any[]>([]);
@@ -232,18 +233,39 @@ export default function AmigosList() {
     });
   };
 
+  // Verifica se um usuário é amigo confirmado
+  const isAmigo = (user: Usuario) => {
+    return amizades.some(
+      (a) =>
+        a.ativo === true &&
+        ((a.usuario_id === currentUserId && a.amigo_id === user.id) ||
+         (a.usuario_id === user.id && a.amigo_id === currentUserId))
+    );
+  };
+
   // Solicitações pendentes que OUTROS enviaram para mim
   const solicitacoesRecebidas = amizades.filter(
     (a) => a.amigo_id === currentUserId && a.ativo === false
   );
 
-  // IDs dos usuários que me enviaram solicitação de amizade pendente (ficam apenas na seção superior)
-  const remetenteSolicitacaoIds = new Set(solicitacoesRecebidas.map((a) => a.usuario_id));
+  // Contagem de amigos confirmados
+  const totalMeusAmigos = users.filter((u) => u.id !== currentUserId && isAmigo(u)).length;
 
-  // Na lista inferior, removemos quem já está aguardando resposta na parte superior
-  const filteredUsers = users
-    .filter((u) => !remetenteSolicitacaoIds.has(u.id))
-    .filter((u) => u.nome.toLowerCase().includes(search.toLowerCase()));
+  // 1. Lista da aba "Meus Amigos" (apenas amigos confirmados)
+  const meusAmigos = users
+    .filter((u) => u.id !== currentUserId && isAmigo(u))
+    .filter((u) =>
+      u.nome.toLowerCase().includes(search.toLowerCase()) ||
+      (u.email && u.email.toLowerCase().includes(search.toLowerCase()))
+    );
+
+  // 2. Lista da aba "Adicionar" (todos os demais atletas cadastrados no GoPlay)
+  const usuariosParaAdicionar = users
+    .filter((u) => u.id !== currentUserId && !isAmigo(u))
+    .filter((u) =>
+      u.nome.toLowerCase().includes(search.toLowerCase()) ||
+      (u.email && u.email.toLowerCase().includes(search.toLowerCase()))
+    );
 
   return (
     <div className="px-4 pb-24 w-full max-w-md mx-auto min-h-[calc(100vh-8rem)]">
@@ -254,202 +276,336 @@ export default function AmigosList() {
           <h1 className="text-2xl font-black text-slate-900 leading-none">Amigos</h1>
         </div>
 
+        {/* Seletor de Abas: Meus Amigos vs Adicionar */}
+        <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl mb-3 border border-slate-200">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('amigos');
+              setSearch('');
+            }}
+            className={`py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeTab === 'amigos'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <UserCheck size={14} className={activeTab === 'amigos' ? 'text-red-600' : 'text-slate-400'} />
+            <span>Meus Amigos</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              activeTab === 'amigos' ? 'bg-red-50 text-red-600' : 'bg-slate-200 text-slate-600'
+            }`}>
+              {totalMeusAmigos}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('adicionar');
+              setSearch('');
+            }}
+            className={`py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
+              activeTab === 'adicionar'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <UserPlus size={14} className={activeTab === 'adicionar' ? 'text-red-600' : 'text-slate-400'} />
+            <span>Adicionar</span>
+            {solicitacoesRecebidas.length > 0 && (
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            )}
+          </button>
+        </div>
+
+        {/* Campo de Busca Contextual */}
         <div className="relative">
           <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
             <Search size={18} />
           </span>
           <input
             type="text"
-            placeholder="Buscar parceiros..."
+            placeholder={activeTab === 'amigos' ? 'Buscar entre meus amigos...' : 'Buscar atletas no Go Play...'}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition-all text-sm shadow-xs"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition-all text-sm shadow-xs font-medium"
           />
         </div>
       </div>
-
-      {/* Solicitações de Amizade Recebidas */}
-      {solicitacoesRecebidas.length > 0 && (
-        <div className="glass p-4 rounded-2xl border border-amber-200 bg-amber-50/20 mb-5 space-y-3">
-          <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
-            <UserPlus size={14} className="text-amber-600" />
-            Solicitações de Amizade ({solicitacoesRecebidas.length})
-          </h3>
-          <div className="space-y-2">
-            {solicitacoesRecebidas.map((req) => {
-              const remetente = users.find((u) => u.id === req.usuario_id);
-              if (!remetente) return null;
-              return (
-                <div key={req.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-xs">
-                  <div className="flex items-center gap-2.5">
-                    {remetente.foto ? (
-                      <img src={remetente.foto} alt={remetente.nome} className="w-8 h-8 rounded-full object-cover" />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">
-                        {remetente.nome.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-800 truncate leading-tight">{remetente.nome}</p>
-                      <p className="text-[10px] text-slate-450 truncate">{remetente.email}</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => handleAcceptRequest(req.id)}
-                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg cursor-pointer transition-all active:scale-95"
-                    >
-                      Aceitar
-                    </button>
-                    <button
-                      onClick={() => handleRejectRequest(req.id)}
-                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-650 text-xs font-bold rounded-lg cursor-pointer transition-all active:scale-95"
-                    >
-                      Recusar
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {loading ? (
         <div className="flex justify-center items-center h-48">
           <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : filteredUsers.length === 0 ? (
-        <div className="text-center py-12 glass rounded-2xl">
-          <p className="text-slate-650 text-sm">Nenhum jogador encontrado.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredUsers.map((user) => {
-            const isMe = user.id === currentUserId;
-            
-            // Verifica o relacionamento
-            const amizade = amizades.find(
-              (a) =>
-                (a.usuario_id === currentUserId && a.amigo_id === user.id) ||
-                (a.usuario_id === user.id && a.amigo_id === currentUserId)
-            );
-
-            const ehAmigo = amizade && amizade.ativo === true;
-            const solicitei = amizade && amizade.usuario_id === currentUserId && amizade.ativo === false;
-            const recebiSolicitacao = amizade && amizade.amigo_id === currentUserId && amizade.ativo === false;
-
-            return (
-              <div
-                key={user.id}
-                className="glass p-4 rounded-2xl border border-slate-200 flex items-center justify-between shadow-xs animate-fade-in"
-              >
-                <div className="flex items-center gap-3">
-                  {user.foto ? (
-                    <img
-                      src={user.foto}
-                      alt={user.nome}
-                      className="w-10 h-10 rounded-full object-cover ring-2 ring-red-500/10"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm">
-                      {user.nome.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="font-extrabold text-slate-850 text-sm flex items-center gap-1.5">
-                      <span>{user.nome}</span>
-                      {isMe && (
-                        <span className="text-[9px] font-black uppercase bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md">
-                          Você
-                        </span>
+      ) : activeTab === 'amigos' ? (
+        /* ABA 1: MEUS AMIGOS CONFIRMADOS */
+        <div>
+          {meusAmigos.length === 0 ? (
+            <div className="text-center py-12 glass rounded-2xl p-6 space-y-3">
+              <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 mx-auto flex items-center justify-center font-bold">
+                <Users size={24} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">
+                  {search ? 'Nenhum amigo encontrado' : 'Você ainda não tem amigos adicionados'}
+                </h3>
+                <p className="text-xs text-slate-450 mt-1 max-w-xs mx-auto">
+                  {search
+                    ? `Nenhum amigo corresponde a "${search}".`
+                    : 'Conecte-se com outros atletas cadastrados no Go Play para combinar partidas e trocar mensagens!'}
+                </p>
+              </div>
+              {!search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('adicionar');
+                    setSearch('');
+                  }}
+                  className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-md shadow-red-600/20 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <UserPlus size={14} />
+                  <span>Encontrar Atletas</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {meusAmigos.map((user) => {
+                const unreadCount = unreadBySender[user.id] || 0;
+                return (
+                  <div
+                    key={user.id}
+                    className="glass p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between shadow-xs animate-fade-in"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {user.foto ? (
+                        <img
+                          src={user.foto}
+                          alt={user.nome}
+                          className="w-10 h-10 rounded-full object-cover ring-2 ring-red-500/10 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                          {user.nome.charAt(0).toUpperCase()}
+                        </div>
                       )}
-                    </h3>
-                    <p className="text-xs text-slate-450 leading-tight">{user.email}</p>
-                  </div>
-                </div>
+                      <div className="min-w-0 flex-1 pr-2">
+                        <h3 className="font-extrabold text-slate-850 text-sm truncate leading-tight">
+                          {user.nome}
+                        </h3>
+                        <p className="text-xs text-slate-450 leading-tight truncate">{user.email}</p>
+                      </div>
+                    </div>
 
-                {!isMe && (
-                  <div className="flex gap-2 items-center">
-                    {(() => {
-                      const unreadCount = unreadBySender[user.id] || 0;
-                      return (
-                        <button
-                          onClick={() => navigate(`/mensagens?user=${user.id}`)}
-                          className={`relative p-2.5 rounded-xl transition-all border shadow-xs cursor-pointer active:scale-95 ${
-                            unreadCount > 0
-                              ? 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
-                              : 'bg-slate-50 hover:bg-slate-200 text-slate-650 border-slate-200'
-                          }`}
-                          title={`Enviar mensagem para ${user.nome}${unreadCount > 0 ? ` (${unreadCount} nova${unreadCount > 1 ? 's' : ''})` : ''}`}
-                        >
-                          <MessageSquare size={16} />
-                          {unreadCount > 0 && (
-                            <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center px-0.5 shadow-sm animate-pulse">
-                              {unreadCount > 9 ? '9+' : unreadCount}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })()}
-
-                    {ehAmigo && (
+                    <div className="flex gap-2 items-center shrink-0">
+                      {/* Botão de Chat */}
                       <button
+                        type="button"
+                        onClick={() => navigate(`/mensagens?user=${user.id}`)}
+                        className={`relative p-2.5 rounded-xl transition-all border shadow-xs cursor-pointer active:scale-95 ${
+                          unreadCount > 0
+                            ? 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                            : 'bg-slate-50 hover:bg-slate-200 text-slate-650 border-slate-200'
+                        }`}
+                        title={`Enviar mensagem para ${user.nome}${unreadCount > 0 ? ` (${unreadCount} nova${unreadCount > 1 ? 's' : ''})` : ''}`}
+                      >
+                        <MessageSquare size={16} />
+                        {unreadCount > 0 && (
+                          <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center px-0.5 shadow-sm animate-pulse">
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Botão de Remover Amigo */}
+                      <button
+                        type="button"
                         onClick={() => handleRemoveAmigo(user.id, user.nome)}
-                        className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-650 rounded-xl transition-all border border-emerald-250 shadow-xs cursor-pointer"
+                        className="p-2.5 bg-emerald-50 hover:bg-red-50 hover:text-red-600 text-emerald-600 rounded-xl transition-all border border-emerald-200 hover:border-red-200 shadow-xs cursor-pointer group"
                         title="Remover Amigo"
                       >
                         <UserCheck size={16} />
                       </button>
-                    )}
-
-                    {solicitei && (
-                      <button
-                        onClick={() => handleRejectRequest(amizade.id)}
-                        className="px-2.5 py-2 bg-amber-50 hover:bg-amber-100 hover:text-red-600 text-amber-600 rounded-xl transition-all border border-amber-200 shadow-xs cursor-pointer flex items-center gap-1 text-[10px] font-bold"
-                        title="Clique para Cancelar Solicitação"
-                      >
-                        <Clock size={12} className="animate-spin" />
-                        <span>Pendente</span>
-                        <X size={10} className="ml-1 opacity-60" />
-                      </button>
-                    )}
-
-                    {recebiSolicitacao && (
-                      <div className="flex gap-1">
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ABA 2: ADICIONAR ATLETAS DO GO PLAY */
+        <div className="space-y-4">
+          {/* Solicitações de Amizade Recebidas */}
+          {solicitacoesRecebidas.length > 0 && (
+            <div className="glass p-4 rounded-2xl border border-amber-200 bg-amber-50/30 space-y-3">
+              <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                <UserPlus size={14} className="text-amber-600" />
+                Solicitações de Amizade ({solicitacoesRecebidas.length})
+              </h3>
+              <div className="space-y-2">
+                {solicitacoesRecebidas.map((req) => {
+                  const remetente = users.find((u) => u.id === req.usuario_id);
+                  if (!remetente) return null;
+                  return (
+                    <div key={req.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-amber-100 shadow-xs">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                        {remetente.foto ? (
+                          <img src={remetente.foto} alt={remetente.nome} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                            {remetente.nome.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate leading-tight">{remetente.nome}</p>
+                          <p className="text-[10px] text-slate-450 truncate">{remetente.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1.5 shrink-0">
                         <button
-                          onClick={() => handleAcceptRequest(amizade.id)}
-                          className="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg cursor-pointer transition-all active:scale-95"
-                          title="Aceitar Solicitação"
+                          type="button"
+                          onClick={() => handleAcceptRequest(req.id)}
+                          className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg cursor-pointer transition-all active:scale-95"
                         >
                           Aceitar
                         </button>
                         <button
-                          onClick={() => handleRejectRequest(amizade.id)}
-                          className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-650 text-[10px] font-black rounded-lg cursor-pointer transition-all active:scale-95"
-                          title="Recusar Solicitação"
+                          type="button"
+                          onClick={() => handleRejectRequest(req.id)}
+                          className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-650 text-xs font-bold rounded-lg cursor-pointer transition-all active:scale-95"
                         >
                           Recusar
                         </button>
                       </div>
-                    )}
-
-                    {!amizade && (
-                      <button
-                        onClick={() => handleAddAmigo(user.id, user.nome)}
-                        className="p-2.5 bg-red-55/60 hover:bg-red-100 text-red-650 rounded-xl transition-all border border-red-150 shadow-xs cursor-pointer"
-                        title="Adicionar Amigo"
-                      >
-                        <UserPlus size={16} />
-                      </button>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* Lista de Atletas Disponíveis para Adicionar */}
+          {usuariosParaAdicionar.length === 0 ? (
+            <div className="text-center py-12 glass rounded-2xl p-6 space-y-2">
+              <p className="text-sm font-bold text-slate-700">Nenhum atleta encontrado</p>
+              <p className="text-xs text-slate-450">
+                {search
+                  ? `Não encontramos usuários cadastrados com "${search}".`
+                  : 'Todos os atletas cadastrados já estão na sua lista de amigos!'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {usuariosParaAdicionar.map((user) => {
+                // Verifica se já enviei solicitação ou recebi
+                const amizade = amizades.find(
+                  (a) =>
+                    (a.usuario_id === currentUserId && a.amigo_id === user.id) ||
+                    (a.usuario_id === user.id && a.amigo_id === currentUserId)
+                );
+
+                const solicitei = amizade && amizade.usuario_id === currentUserId && amizade.ativo === false;
+                const recebiSolicitacao = amizade && amizade.amigo_id === currentUserId && amizade.ativo === false;
+                const unreadCount = unreadBySender[user.id] || 0;
+
+                return (
+                  <div
+                    key={user.id}
+                    className="glass p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between shadow-xs animate-fade-in"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
+                      {user.foto ? (
+                        <img
+                          src={user.foto}
+                          alt={user.nome}
+                          className="w-10 h-10 rounded-full object-cover ring-2 ring-red-500/10 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                          {user.nome.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <h3 className="font-extrabold text-slate-850 text-sm truncate leading-tight">
+                          {user.nome}
+                        </h3>
+                        <p className="text-xs text-slate-450 leading-tight truncate">{user.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 items-center shrink-0">
+                      {/* Botão de Mensagem */}
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/mensagens?user=${user.id}`)}
+                        className={`relative p-2.5 rounded-xl transition-all border shadow-xs cursor-pointer active:scale-95 ${
+                          unreadCount > 0
+                            ? 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                            : 'bg-slate-50 hover:bg-slate-200 text-slate-650 border-slate-200'
+                        }`}
+                        title={`Enviar mensagem para ${user.nome}`}
+                      >
+                        <MessageSquare size={16} />
+                      </button>
+
+                      {/* Status / Botão de Ação */}
+                      {solicitei && (
+                        <button
+                          type="button"
+                          onClick={() => handleRejectRequest(amizade.id)}
+                          className="px-2.5 py-2 bg-amber-50 hover:bg-amber-100 hover:text-red-600 text-amber-600 rounded-xl transition-all border border-amber-200 shadow-xs cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                          title="Clique para Cancelar Solicitação"
+                        >
+                          <Clock size={12} className="animate-spin" />
+                          <span>Pendente</span>
+                          <X size={10} className="ml-1 opacity-60" />
+                        </button>
+                      )}
+
+                      {recebiSolicitacao && (
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptRequest(amizade.id)}
+                            className="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg cursor-pointer transition-all active:scale-95"
+                            title="Aceitar Solicitação"
+                          >
+                            Aceitar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectRequest(amizade.id)}
+                            className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-650 text-[10px] font-black rounded-lg cursor-pointer transition-all active:scale-95"
+                            title="Recusar Solicitação"
+                          >
+                            Recusar
+                          </button>
+                        </div>
+                      )}
+
+                      {!amizade && (
+                        <button
+                          type="button"
+                          onClick={() => handleAddAmigo(user.id, user.nome)}
+                          className="px-3 py-2 bg-red-50 hover:bg-red-600 hover:text-white text-red-600 rounded-xl transition-all border border-red-200 shadow-xs cursor-pointer flex items-center gap-1 text-xs font-bold active:scale-95"
+                          title="Adicionar Amigo"
+                        >
+                          <UserPlus size={14} />
+                          <span>Adicionar</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
+
       <Dialog {...dialog} />
     </div>
   );
