@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Usuario } from '../../types';
 import { UserPlus, UserCheck, MessageSquare, Search, Clock, X } from 'lucide-react';
 import Dialog from '../../components/common/Dialog';
 
 export default function AmigosList() {
+  const navigate = useNavigate();
   const [users, setUsers] = useState<Usuario[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [amizades, setAmizades] = useState<any[]>([]);
+  const [unreadBySender, setUnreadBySender] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialog, setDialog] = useState<{
@@ -27,6 +30,12 @@ export default function AmigosList() {
 
   useEffect(() => {
     fetchUsersAndFriendships();
+
+    const handleRefresh = () => {
+      fetchUsersAndFriendships();
+    };
+    window.addEventListener('goplay:refresh-notifications', handleRefresh);
+    return () => window.removeEventListener('goplay:refresh-notifications', handleRefresh);
   }, []);
 
   const fetchUsersAndFriendships = async () => {
@@ -63,6 +72,25 @@ export default function AmigosList() {
           .or(`usuario_id.eq.${loggedId},amigo_id.eq.${loggedId}`);
         if (!amigosError && dbAmigos) {
           setAmizades(dbAmigos);
+        }
+
+        // 4. Obter mensagens não lidas recebidas por remetente
+        try {
+          const { data: unreadData } = await supabase
+            .from('mensagens')
+            .select('remetente_id')
+            .eq('destinatario_id', loggedId)
+            .eq('lida', false);
+
+          if (unreadData) {
+            const counts: Record<string, number> = {};
+            unreadData.forEach((m: any) => {
+              counts[m.remetente_id] = (counts[m.remetente_id] || 0) + 1;
+            });
+            setUnreadBySender(counts);
+          }
+        } catch {
+          // Tabela mensagens pode não ter sido criada ainda
         }
       }
     } catch (e) {
@@ -126,6 +154,7 @@ export default function AmigosList() {
         .single();
       if (!error && data) {
         setAmizades((prev) => prev.map((a) => (a.id === requestId ? data : a)));
+        window.dispatchEvent(new CustomEvent('goplay:refresh-notifications'));
       } else if (error) {
         setDialog({
           isOpen: true,
@@ -145,6 +174,7 @@ export default function AmigosList() {
       const { error } = await supabase.from('amigos').delete().eq('id', requestId);
       if (!error) {
         setAmizades((prev) => prev.filter((a) => a.id !== requestId));
+        window.dispatchEvent(new CustomEvent('goplay:refresh-notifications'));
       } else {
         setDialog({
           isOpen: true,
@@ -178,6 +208,7 @@ export default function AmigosList() {
           const { error } = await supabase.from('amigos').delete().eq('id', amizadeRow.id);
           if (!error) {
             setAmizades((prev) => prev.filter((a) => a.id !== amizadeRow.id));
+            window.dispatchEvent(new CustomEvent('goplay:refresh-notifications'));
           } else {
             setDialog({
               isOpen: true,
@@ -201,14 +232,18 @@ export default function AmigosList() {
     });
   };
 
-  const filteredUsers = users.filter((u) =>
-    u.nome.toLowerCase().includes(search.toLowerCase())
-  );
-
   // Solicitações pendentes que OUTROS enviaram para mim
   const solicitacoesRecebidas = amizades.filter(
     (a) => a.amigo_id === currentUserId && a.ativo === false
   );
+
+  // IDs dos usuários que me enviaram solicitação de amizade pendente (ficam apenas na seção superior)
+  const remetenteSolicitacaoIds = new Set(solicitacoesRecebidas.map((a) => a.usuario_id));
+
+  // Na lista inferior, removemos quem já está aguardando resposta na parte superior
+  const filteredUsers = users
+    .filter((u) => !remetenteSolicitacaoIds.has(u.id))
+    .filter((u) => u.nome.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="px-4 py-3 pb-24 w-full max-w-md mx-auto min-h-[calc(100vh-8rem)]">
@@ -333,19 +368,27 @@ export default function AmigosList() {
 
                 {!isMe && (
                   <div className="flex gap-2 items-center">
-                    <button
-                      onClick={() => setDialog({
-                        isOpen: true,
-                        title: 'Mensagens',
-                        message: 'Mensagens diretas estarão disponíveis em breve!',
-                        type: 'alert',
-                        onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
-                      })}
-                      className="p-2.5 bg-slate-50 hover:bg-slate-200 text-slate-650 rounded-xl transition-all border border-slate-200 shadow-xs cursor-pointer"
-                      title="Enviar mensagem"
-                    >
-                      <MessageSquare size={16} />
-                    </button>
+                    {(() => {
+                      const unreadCount = unreadBySender[user.id] || 0;
+                      return (
+                        <button
+                          onClick={() => navigate(`/mensagens?user=${user.id}`)}
+                          className={`relative p-2.5 rounded-xl transition-all border shadow-xs cursor-pointer active:scale-95 ${
+                            unreadCount > 0
+                              ? 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                              : 'bg-slate-50 hover:bg-slate-200 text-slate-650 border-slate-200'
+                          }`}
+                          title={`Enviar mensagem para ${user.nome}${unreadCount > 0 ? ` (${unreadCount} nova${unreadCount > 1 ? 's' : ''})` : ''}`}
+                        >
+                          <MessageSquare size={16} />
+                          {unreadCount > 0 && (
+                            <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center px-0.5 shadow-sm animate-pulse">
+                              {unreadCount > 9 ? '9+' : unreadCount}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })()}
 
                     {ehAmigo && (
                       <button

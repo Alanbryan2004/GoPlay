@@ -125,3 +125,14 @@ export interface ComunidadeGrupo {
   // Join
   grupo?: Grupo;
 }
+
+export interface Mensagem {
+  id: string;
+  remetente_id: string;
+  destinatario_id: string;
+  conteudo: string;
+  lida: boolean;
+  created_at: string;
+  remetente?: Usuario;
+  destinatario?: Usuario;
+}

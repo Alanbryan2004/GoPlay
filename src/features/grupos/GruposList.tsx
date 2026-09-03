@@ -23,6 +23,8 @@ export default function GruposList() {
   const [membros, setMembros] = useState<any[]>([]); // { id (membros_grupo row id), usuario_id, tipo_perfil, status, usuario: Usuario }
   const [amigosParaAdicionar, setAmigosParaAdicionar] = useState<Usuario[]>([]);
   const [loadingMembros, setLoadingMembros] = useState(false);
+  // Mapa de grupo_id -> contagem de solicitações de entrada pendentes (para grupos que o usuário administra)
+  const [pendingGroupRequests, setPendingGroupRequests] = useState<Record<string, number>>({});
 
   // Estados de Edição do Grupo
   const [isEditingGroup, setIsEditingGroup] = useState(false);
@@ -91,6 +93,31 @@ export default function GruposList() {
         
         if (!memError && memData) {
           setMyMemberships(memData);
+
+          // 3. Buscar solicitações de entrada pendentes para os grupos que este usuário administra
+          const adminGrupoIds = memData
+            .filter((m: any) => m.tipo_perfil === 'A' && m.status === 'aprovado')
+            .map((m: any) => m.grupo_id);
+
+          if (adminGrupoIds.length > 0) {
+            const { data: pendingMembers, error: pendingError } = await supabase
+              .from('membros_grupo')
+              .select('grupo_id')
+              .in('grupo_id', adminGrupoIds)
+              .eq('status', 'pendente');
+
+            if (!pendingError && pendingMembers) {
+              const counts: Record<string, number> = {};
+              pendingMembers.forEach((p: any) => {
+                counts[p.grupo_id] = (counts[p.grupo_id] || 0) + 1;
+              });
+              setPendingGroupRequests(counts);
+            } else {
+              setPendingGroupRequests({});
+            }
+          } else {
+            setPendingGroupRequests({});
+          }
         }
       }
     } catch (e) {
@@ -669,6 +696,7 @@ export default function GruposList() {
       if (!error && selectedGrupo) {
         await fetchMembersOfSelectedGroup(selectedGrupo.id);
         await fetchGruposAndMemberships();
+        window.dispatchEvent(new CustomEvent('goplay:refresh-notifications'));
       } else {
         console.error('Erro ao aprovar solicitação:', error);
       }
@@ -688,6 +716,7 @@ export default function GruposList() {
       if (!error && selectedGrupo) {
         await fetchMembersOfSelectedGroup(selectedGrupo.id);
         await fetchGruposAndMemberships();
+        window.dispatchEvent(new CustomEvent('goplay:refresh-notifications'));
       } else {
         console.error('Erro ao recusar solicitação:', error);
       }
@@ -721,9 +750,19 @@ export default function GruposList() {
   );
 
   // Separação de grupos para exibição
-  const meusGrupos = filteredAllGrupos.filter((g) =>
+  const meusGruposRaw = filteredAllGrupos.filter((g) =>
     myMemberships.some((m) => m.grupo_id === g.id && m.status === 'aprovado')
   );
+
+  // Prioriza grupos que possuem solicitações pendentes no topo da lista
+  const meusGrupos = [...meusGruposRaw].sort((a, b) => {
+    const pendA = pendingGroupRequests[a.id] || 0;
+    const pendB = pendingGroupRequests[b.id] || 0;
+    if (pendA !== pendB) {
+      return pendB - pendA; // Mais pendências primeiro
+    }
+    return a.nome.localeCompare(b.nome);
+  });
 
   const convitesRecebidos = filteredAllGrupos.filter((g) =>
     myMemberships.some((m) => m.grupo_id === g.id && m.status === 'convidado')
@@ -953,34 +992,62 @@ export default function GruposList() {
                 {meusGrupos.map((grupo) => {
                   const myMem = myMemberships.find((m) => m.grupo_id === grupo.id);
                   const isUserAdmin = myMem?.tipo_perfil === 'A';
+                  const pendingCount = isUserAdmin ? (pendingGroupRequests[grupo.id] || 0) : 0;
+                  const hasPending = pendingCount > 0;
+
                   return (
                     <div
                       key={grupo.id}
                       onClick={() => openManageMembers(grupo)}
-                      className="glass p-4 rounded-2xl border border-slate-200 hover:border-red-650/40 cursor-pointer active:scale-[0.99] transition-all flex items-center justify-between shadow-xs animate-fade-in"
+                      className={`glass p-4 rounded-2xl border transition-all flex items-center justify-between shadow-xs cursor-pointer active:scale-[0.99] animate-fade-in ${
+                        hasPending
+                          ? 'border-red-400/80 bg-red-50/25 hover:border-red-500 hover:bg-red-50/35 ring-1 ring-red-400/30'
+                          : 'border-slate-200 hover:border-red-650/40'
+                      }`}
                     >
-                      <div className="flex items-center gap-3">
-                        {grupo.foto ? (
-                          <img src={grupo.foto} alt={grupo.nome} className="w-10 h-10 rounded-xl object-cover shrink-0 border border-slate-150" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-xl bg-red-600/10 text-red-500 flex items-center justify-center shrink-0">
-                            <Users size={20} />
-                          </div>
-                        )}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-extrabold text-slate-850 text-sm leading-tight">{grupo.nome}</h3>
+                      <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
+                        <div className="relative shrink-0">
+                          {grupo.foto ? (
+                            <img src={grupo.foto} alt={grupo.nome} className="w-10 h-10 rounded-xl object-cover shrink-0 border border-slate-150" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-red-600/10 text-red-500 flex items-center justify-center shrink-0">
+                              <Users size={20} />
+                            </div>
+                          )}
+                          {hasPending && (
+                            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-600 border-2 border-white rounded-full flex items-center justify-center animate-pulse" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-extrabold text-slate-850 text-sm leading-tight truncate">{grupo.nome}</h3>
                             {grupo.publico ? (
                               <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">Público</span>
                             ) : (
                               <span className="bg-amber-50 text-amber-600 border border-amber-100 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">Privado</span>
                             )}
                           </div>
-                          <p className="text-[9px] font-bold text-red-500 uppercase tracking-wider mt-1">
-                            {isUserAdmin ? 'Administrar Grupo' : 'Ver Integrantes'}
-                          </p>
+                          {hasPending ? (
+                            <p className="text-[9px] font-black text-red-600 uppercase tracking-wider mt-1 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-ping inline-block" />
+                              Administrar Grupo • {pendingCount} nova{pendingCount > 1 ? 's' : ''} solicitação{pendingCount > 1 ? 'ões' : ''}
+                            </p>
+                          ) : (
+                            <p className="text-[9px] font-bold text-red-500 uppercase tracking-wider mt-1">
+                              {isUserAdmin ? 'Administrar Grupo' : 'Ver Integrantes'}
+                            </p>
+                          )}
                         </div>
                       </div>
+
+                      {hasPending && (
+                        <div className="shrink-0 pl-2">
+                          <span className="bg-gradient-to-r from-red-600 to-rose-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1 animate-pulse">
+                            <Users size={12} />
+                            <span>{pendingCount} {pendingCount === 1 ? 'pendente' : 'pendentes'}</span>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

@@ -1,7 +1,7 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   User, LogOut, Menu, Users, Calendar, X, Home as HomeIcon,
-  UserPlus, Trophy, Network, Bell
+  UserPlus, Trophy, Network, Bell, MessageSquare
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useState, useEffect, useCallback } from 'react';
@@ -13,6 +13,7 @@ interface NotificationCounts {
   rankingChange: boolean;    // Houve mudança de posição no ranking recentemente
   finishedEvents: number;    // Eventos recém finalizados não vistos
   latestFinishedEventId?: string; // ID do último evento finalizado para ir direto ao resultado
+  unreadMessages: number;    // Mensagens diretas não lidas recebidas
 }
 
 const LAST_SEEN_EVENTS_KEY = 'goplay_last_seen_events';
@@ -34,11 +35,17 @@ export default function Header() {
     groupRequests: 0,
     rankingChange: false,
     finishedEvents: 0,
+    unreadMessages: 0,
   });
   const [showNotifPanel, setShowNotifPanel] = useState(false);
 
   const totalNotifs =
-    notifs.friendRequests + notifs.newEvents + notifs.groupRequests + (notifs.rankingChange ? 1 : 0) + notifs.finishedEvents;
+    notifs.friendRequests +
+    notifs.newEvents +
+    notifs.groupRequests +
+    (notifs.rankingChange ? 1 : 0) +
+    notifs.finishedEvents +
+    notifs.unreadMessages;
 
   useEffect(() => {
     async function getProfile() {
@@ -221,6 +228,19 @@ export default function Header() {
         localStorage.setItem(lastSeenFinishedKey, new Date().toISOString());
       }
 
+      // 6. Mensagens diretas não lidas recebidas pelo usuário
+      let unreadMessagesCount = 0;
+      try {
+        const { count: msgCount } = await supabase
+          .from('mensagens')
+          .select('id', { count: 'exact', head: true })
+          .eq('destinatario_id', userId)
+          .eq('lida', false);
+        unreadMessagesCount = msgCount || 0;
+      } catch {
+        // Tabela mensagens ainda pode não existir no banco
+      }
+
       setNotifs({
         friendRequests: friendCount || 0,
         newEvents: newEventsCount,
@@ -228,11 +248,50 @@ export default function Header() {
         rankingChange: rankingChanged,
         finishedEvents: finishedEventsCount,
         latestFinishedEventId: latestFinishedId,
+        unreadMessages: unreadMessagesCount,
       });
     } catch (e) {
       console.error('Erro ao buscar notificações:', e);
     }
   }, []);
+
+  // Ouvinte global para atualização imediata das notificações em qualquer ação do app
+  useEffect(() => {
+    const handleRefresh = () => {
+      if (currentUserId) {
+        fetchNotifications(currentUserId);
+      }
+    };
+    window.addEventListener('goplay:refresh-notifications', handleRefresh);
+    return () => window.removeEventListener('goplay:refresh-notifications', handleRefresh);
+  }, [currentUserId, fetchNotifications]);
+
+  // Inscrição Realtime no Supabase para novas mensagens direcionadas ao usuário
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const channel = supabase
+      .channel(`notifs_mensagens_${currentUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mensagens',
+        },
+        (payload: any) => {
+          const row = payload.new || payload.old;
+          if (row && (row.destinatario_id === currentUserId || row.remetente_id === currentUserId)) {
+            fetchNotifications(currentUserId);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, fetchNotifications]);
 
   const markEventsSeen = () => {
     localStorage.setItem(LAST_SEEN_EVENTS_KEY, new Date().toISOString());
@@ -315,7 +374,8 @@ export default function Header() {
     location.pathname === '/grupos' ||
     location.pathname === '/ranking' ||
     location.pathname === '/amigos' ||
-    location.pathname === '/comunidades';
+    location.pathname === '/comunidades' ||
+    location.pathname === '/mensagens';
 
   if (!showSidebar) return null;
 
@@ -323,6 +383,7 @@ export default function Header() {
   const navItems = [
     { to: '/', icon: HomeIcon, label: 'Home', badge: 0 },
     { to: '/amigos', icon: UserPlus, label: 'Amigos', badge: notifs.friendRequests },
+    { to: '/mensagens', icon: MessageSquare, label: 'Mensagens', badge: notifs.unreadMessages },
     { to: '/eventos', icon: Calendar, label: 'Eventos', badge: notifs.newEvents, onClickExtra: markEventsSeen },
     { to: '/torneios', icon: Trophy, label: 'Torneios', badge: 0 },
     { to: '/grupos', icon: Users, label: 'Grupos', badge: notifs.groupRequests },
@@ -440,6 +501,24 @@ export default function Header() {
                       </div>
                       <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500 text-white text-[9px] font-black flex items-center justify-center">
                         {notifs.friendRequests}
+                      </span>
+                    </button>
+                  )}
+
+                  {notifs.unreadMessages > 0 && (
+                    <button
+                      onClick={() => { setShowNotifPanel(false); setDrawerOpen(false); navigate('/mensagens'); }}
+                      className="w-full flex items-center gap-2.5 p-2 bg-white rounded-xl border border-amber-200 hover:border-amber-400 transition-all text-left"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <MessageSquare size={13} className="text-emerald-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-slate-700">Novas Mensagens</p>
+                        <p className="text-[10px] text-slate-500">{notifs.unreadMessages} mensagem{notifs.unreadMessages > 1 ? 's' : ''} não lida{notifs.unreadMessages > 1 ? 's' : ''}</p>
+                      </div>
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500 text-white text-[9px] font-black flex items-center justify-center">
+                        {notifs.unreadMessages}
                       </span>
                     </button>
                   )}

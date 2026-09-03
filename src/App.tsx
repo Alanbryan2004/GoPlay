@@ -21,6 +21,7 @@ import SorteioQuick from './features/eventos/SorteioQuick';
 import GruposList from './features/grupos/GruposList';
 import RankingList from './features/ranking/RankingList';
 import AmigosList from './features/amigos/AmigosList';
+import MensagensPage from './features/mensagens/MensagensPage';
 import Home from './features/home/Home';
 import ComunidadesList from './features/comunidades/ComunidadesList';
 import ComunidadeDetails from './features/comunidades/ComunidadeDetails';
@@ -80,6 +81,7 @@ function AppContent() {
           <Route path="/grupos" element={<GruposList />} />
           <Route path="/ranking" element={<RankingList />} />
           <Route path="/amigos" element={<AmigosList />} />
+          <Route path="/mensagens" element={<MensagensPage />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/comunidades" element={<ComunidadesList />} />
           <Route path="/comunidades/:id" element={<ComunidadeDetails />} />
