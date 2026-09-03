@@ -8,6 +8,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dayjs from 'dayjs';
 import Dialog from '../../components/common/Dialog';
 
+const getModalityIcon = (name?: string) => {
+  if (!name) return '🏆';
+  const n = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (n.includes('volei')) return '🏐';
+  if (n.includes('futebol') || n.includes('futsal') || n.includes('society')) return '⚽';
+  if (n.includes('basquete')) return '🏀';
+  if (n.includes('beach') || n.includes('tenis')) return '🎾';
+  if (n.includes('futevolei')) return '🏖️';
+  if (n.includes('mesa') || n.includes('ping')) return '🏓';
+  return '🏆';
+};
+
 export default function TorneioDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -89,7 +101,7 @@ export default function TorneioDetails() {
     try {
       const { data, error } = await supabase
         .from('torneios')
-        .select('*')
+        .select('*, modalidades:modalidade_id(id, nome)')
         .eq('id', id)
         .single();
 
@@ -893,9 +905,17 @@ export default function TorneioDetails() {
           </button>
           <div>
             <h1 className="text-xl font-black text-slate-900 leading-tight">{torneio.nome}</h1>
-            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
-              {torneio.formato === 'chaveamento' ? 'Chaveamento Eliminatório' : 'Pontos Corridos'}
-            </span>
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              {torneio.modalidades?.nome && (
+                <span className="text-[10px] font-black text-red-650 bg-red-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-red-200/50">
+                  <span>{getModalityIcon(torneio.modalidades.nome)}</span>
+                  <span>{torneio.modalidades.nome}</span>
+                </span>
+              )}
+              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                {torneio.formato === 'chaveamento' ? 'Chaveamento' : 'Pontos Corridos'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1029,7 +1049,11 @@ export default function TorneioDetails() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-600 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-600 pt-2 border-t border-slate-100 flex-wrap gap-2">
+              <span className="flex items-center gap-1">
+                <span>{getModalityIcon(torneio.modalidades?.nome)}</span>
+                <strong className="text-slate-800">{torneio.modalidades?.nome || 'Esporte'}</strong>
+              </span>
               <span>👥 {torneio.quantidade_times} Times ({torneio.jogadores_por_time || 2}x{torneio.jogadores_por_time || 2})</span>
               <span>🎲 {torneio.tipo_times === 'sorteio' ? 'Por Sorteio' : 'Fechados'}</span>
               <span>{torneio.publico ? '🌐 Público' : '🔒 Privado'}</span>

@@ -37,4 +37,6 @@ export interface Torneio {
   status: 'rascunho' | 'sorteado' | 'em_andamento' | 'finalizado' | 'encerrado';
   campeao_id?: string;
   created_at?: string;
+  modalidade?: { id: string; nome: string };
+  modalidades?: { id: string; nome: string };
 }

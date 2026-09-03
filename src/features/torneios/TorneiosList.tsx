@@ -5,6 +5,18 @@ import type { Torneio } from '../../types/torneio';
 import { Trophy, Plus, Calendar, Users, GitMerge, Award, ChevronRight, Lock, Globe } from 'lucide-react';
 import dayjs from 'dayjs';
 
+const getModalityIcon = (name?: string) => {
+  if (!name) return '🏆';
+  const n = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (n.includes('volei')) return '🏐';
+  if (n.includes('futebol') || n.includes('futsal') || n.includes('society')) return '⚽';
+  if (n.includes('basquete')) return '🏀';
+  if (n.includes('beach') || n.includes('tenis')) return '🎾';
+  if (n.includes('futevolei')) return '🏖️';
+  if (n.includes('mesa') || n.includes('ping')) return '🏓';
+  return '🏆';
+};
+
 export default function TorneiosList() {
   const navigate = useNavigate();
   const [torneios, setTorneios] = useState<Torneio[]>([]);
@@ -19,7 +31,7 @@ export default function TorneiosList() {
     try {
       const { data, error } = await supabase
         .from('torneios')
-        .select('*')
+        .select('*, modalidades:modalidade_id(id, nome)')
         .order('created_at', { ascending: false });
 
       if (!error && data) {
@@ -85,8 +97,14 @@ export default function TorneiosList() {
               className="glass p-4 rounded-2xl border border-slate-200 hover:border-amber-400 transition-all shadow-sm active:scale-[0.99] cursor-pointer space-y-3"
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="p-1.5 rounded-lg bg-amber-100 text-amber-700 font-bold text-xs flex items-center gap-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {t.modalidades?.nome && (
+                    <span className="text-[10px] text-red-650 bg-red-50 border border-red-200/60 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                      <span>{getModalityIcon(t.modalidades.nome)}</span>
+                      <span>{t.modalidades.nome}</span>
+                    </span>
+                  )}
+                  <span className="p-1 rounded-lg bg-amber-100 text-amber-700 font-bold text-xs flex items-center gap-1">
                     {t.formato === 'chaveamento' ? <GitMerge size={12} /> : <Award size={12} />}
                     {t.formato === 'chaveamento' ? 'Chaveamento' : 'Pontos Corridos'}
                   </span>
@@ -106,12 +124,12 @@ export default function TorneiosList() {
 
               <div>
                 <h3 className="font-black text-slate-900 text-base">{t.nome}</h3>
-                <div className="flex items-center gap-4 text-xs text-slate-500 mt-1">
-                  <span className="flex items-center gap-1">
-                    <Users size={12} /> {t.quantidade_times} Times ({t.tipo_times === 'sorteio' ? 'Sorteados' : 'Fechados'})
+                <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
+                  <span className="flex items-center gap-1 font-medium">
+                    <Users size={12} className="text-slate-450" /> {t.quantidade_times} Times ({t.jogadores_por_time || 2}x{t.jogadores_por_time || 2})
                   </span>
-                  <span className="flex items-center gap-1">
-                    <Calendar size={12} /> {dayjs(t.data_inicio).format('DD/MM/YYYY')}
+                  <span className="flex items-center gap-1 font-medium">
+                    <Calendar size={12} className="text-slate-450" /> {dayjs(t.data_inicio).format('DD/MM/YYYY')}
                   </span>
                 </div>
               </div>
