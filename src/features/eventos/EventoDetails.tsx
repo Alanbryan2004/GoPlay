@@ -1146,16 +1146,32 @@ export default function EventoDetails() {
     });
   };
 
-  // Copiar link do evento para o clipboard
-  const handleCopiarLinkEvento = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setDialog({
-      isOpen: true,
-      title: 'Link de Convite Copiado! 🔗',
-      message: 'O link deste evento foi copiado para a sua área de transferência. Envie para os seus amigos no WhatsApp para que eles possam confirmar presença de forma simples e direta!',
-      type: 'alert',
-      onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
-    });
+  // Copiar link do evento para o clipboard ou compartilhar nativo
+  const handleCopiarLinkEvento = async () => {
+    if (!evento) return;
+    const url = window.location.href;
+    const texto = `🏆 *${evento.descricao}*\n📅 ${dayjs(evento.data).format('DD/MM/YYYY [-] HH:mm')}\n📍 ${evento.local}\n\nConfirme sua presença pelo link:\n${url}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: evento.descricao,
+          text: texto,
+          url,
+        });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(texto);
+        setDialog({
+          isOpen: true,
+          title: 'Link Copiado! 🔗',
+          message: 'O link e os dados do evento foram copiados para a área de transferência. Agora é só colar no WhatsApp!',
+          type: 'alert',
+          onConfirm: () => setDialog((prev) => ({ ...prev, isOpen: false })),
+        });
+      }
+    } catch (e) {
+      console.warn('Compartilhamento cancelado ou não suportado:', e);
+    }
   };
 
   // Confirmar presença de forma autônoma

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Evento } from '../../types';
-import { Plus, Trash2, Calendar, MapPin, Search, ChevronRight, History, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Calendar, MapPin, Search, ChevronRight, History, CheckCircle2, BookOpen } from 'lucide-react';
 import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import Dialog from '../../components/common/Dialog';
@@ -278,6 +278,16 @@ export default function EventosList() {
                 >
                   <History size={15} className="text-slate-500" />
                   <span>Histórico</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPlusMenu(false);
+                    window.dispatchEvent(new CustomEvent('goplay:open-tutorial'));
+                  }}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-bold text-amber-700 hover:bg-amber-50 transition-colors flex items-center gap-2.5 border-t border-slate-100"
+                >
+                  <BookOpen size={15} className="text-amber-500" />
+                  <span>Como Funciona</span>
                 </button>
               </div>
             </>

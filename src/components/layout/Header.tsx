@@ -1,10 +1,11 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   User, LogOut, Menu, Users, Calendar, X, Home as HomeIcon,
-  UserPlus, Trophy, Network, Bell, MessageSquare
+  UserPlus, Trophy, Network, Bell, MessageSquare, BookOpen
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useState, useEffect, useCallback } from 'react';
+import TutorialModal from '../common/TutorialModal';
 
 interface NotificationCounts {
   friendRequests: number;    // Solicitações de amizade pendentes
@@ -38,6 +39,13 @@ export default function Header() {
     unreadMessages: 0,
   });
   const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [showTutorialGlobal, setShowTutorialGlobal] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = () => setShowTutorialGlobal(true);
+    window.addEventListener('goplay:open-tutorial', handleOpen);
+    return () => window.removeEventListener('goplay:open-tutorial', handleOpen);
+  }, []);
 
   const totalNotifs =
     notifs.friendRequests +
@@ -648,11 +656,23 @@ export default function Header() {
             })}
           </div>
 
-          {/* Bottom: Logout */}
-          <div className="p-4 border-t border-slate-150 bg-slate-50">
+          {/* Bottom: Tutorial & Logout */}
+          <div className="p-3 border-t border-slate-150 bg-slate-50 space-y-1">
+            <button
+              type="button"
+              onClick={() => {
+                setDrawerOpen(false);
+                setShowTutorialGlobal(true);
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2 text-slate-700 hover:bg-slate-200/60 rounded-xl font-bold transition-colors cursor-pointer text-xs"
+            >
+              <BookOpen size={16} className="text-amber-500" />
+              <span>Como Funciona (Tutorial)</span>
+            </button>
+
             <button
               onClick={() => { setDrawerOpen(false); handleLogout(); }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 text-red-650 hover:bg-red-55 rounded-xl font-medium transition-colors cursor-pointer text-xs"
+              className="w-full flex items-center gap-3 px-3 py-2 text-red-650 hover:bg-red-55 rounded-xl font-medium transition-colors cursor-pointer text-xs"
             >
               <LogOut size={16} />
               <span>Sair</span>
@@ -668,6 +688,12 @@ export default function Header() {
           onClick={() => setDrawerOpen(false)}
         />
       )}
+
+      {/* Tutorial Modal Global */}
+      <TutorialModal
+        isOpen={showTutorialGlobal}
+        onClose={() => setShowTutorialGlobal(false)}
+      />
     </>
   );
 }

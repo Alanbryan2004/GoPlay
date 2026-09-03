@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Modalidade } from '../../types';
-import { Calendar, MapPin, AlignLeft, Activity, ArrowLeft, Network } from 'lucide-react';
+import { Calendar, MapPin, AlignLeft, Activity, ArrowLeft, Network, BookOpen } from 'lucide-react';
 import dayjs from 'dayjs';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/utc';
@@ -201,14 +201,26 @@ export default function NovoEvento() {
 
   return (
     <div className="px-4 py-2 pb-20 w-full max-w-md mx-auto">
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 rounded-lg bg-slate-50 hover:bg-slate-200 text-slate-700 transition-colors"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <h1 className="text-2xl font-extrabold text-slate-900">Novo Evento</h1>
+        </div>
+
         <button
-          onClick={() => navigate(-1)}
-          className="p-2 rounded-lg bg-slate-50 hover:bg-slate-200 text-slate-700 transition-colors"
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('goplay:open-tutorial'))}
+          className="px-2.5 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 transition-all flex items-center gap-1 text-xs font-bold cursor-pointer shadow-xs"
+          title="Ver Guia de Criação"
         >
-          <ArrowLeft size={18} />
+          <BookOpen size={14} className="text-amber-600" />
+          <span>Ajuda</span>
         </button>
-        <h1 className="text-2xl font-extrabold text-slate-900">Novo Evento</h1>
       </div>
 
       <div className="glass p-4 rounded-2xl shadow-md">
