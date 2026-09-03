@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Participante } from '../../types';
+import { ActionAfterVictories } from '../../types';
 import {
   sortearTimes,
   subirPrioridade,
@@ -22,7 +23,8 @@ import {
   CheckCircle2,
   Users,
   Trophy,
-  History
+  History,
+  Settings
 } from 'lucide-react';
 
 interface QuickParticipante extends Participante {
@@ -46,7 +48,7 @@ export default function SorteioQuick() {
   const [selectedGrupoId, setSelectedGrupoId] = useState<string>('avulso');
   const [loadingGrupos, setLoadingGrupos] = useState(true);
 
-  // Lista unificada de participantes (com prioridade idêntica ao Evento)
+  // Lista unificada de participantes
   const [participantes, setParticipantes] = useState<QuickParticipante[]>([]);
   const [search, setSearch] = useState('');
 
@@ -54,11 +56,16 @@ export default function SorteioQuick() {
   const [novoNome, setNovoNome] = useState('');
   const [novaAvaliacao, setNovaAvaliacao] = useState(3.0);
 
-  // Configurações
-  const [playersPerTeam, setPlayersPerTeam] = useState(6);
-  const [sortMode, setSortMode] = useState<'balanced' | 'random'>('balanced');
+  // Configurações da Partida (Idênticas ao Evento)
+  const [numberOfPlayers, setNumberOfPlayers] = useState(6);
+  const [maxNumberOfVictories, setMaxNumberOfVictories] = useState(3);
+  const [actionAfterVictories, setActionAfterVictories] = useState<ActionAfterVictories>(
+    ActionAfterVictories.Mesclar
+  );
+  const [useRating, setUseRating] = useState(true);
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
-  // Estado da Partida Ativa (Estilo Evento)
+  // Estado da Partida Ativa
   const [timeA, setTimeA] = useState<QuickParticipante[]>([]);
   const [timeB, setTimeB] = useState<QuickParticipante[]>([]);
   const [placarA, setPlacarA] = useState(0);
@@ -67,6 +74,7 @@ export default function SorteioQuick() {
   const [vitoriasB, setVitoriasB] = useState(0);
   const [numeroPartida, setNumeroPartida] = useState(1);
   const [historicoPartidas, setHistoricoPartidas] = useState<PartidaHistorico[]>([]);
+  const [mensagemRodizio, setMensagemRodizio] = useState<string | null>(null);
 
   // Estados de controle
   const [isDrawing, setIsDrawing] = useState(false);
@@ -178,7 +186,7 @@ export default function SorteioQuick() {
       nome: nomeLimpo,
       avaliacao: novaAvaliacao,
       checked: true,
-      prioridade: 0,
+      prioridade: isJogoAtivo ? 1 : 0,
       isAvulso: true,
     };
 
@@ -202,7 +210,7 @@ export default function SorteioQuick() {
     setParticipantes((prev) => prev.map((m) => ({ ...m, checked })));
   };
 
-  // Sorteio Inicial aplicando exatamente a regra do Evento
+  // Sorteio Inicial
   const handleSortear = () => {
     const presentes = participantes.filter((m) => m.checked);
     
@@ -212,18 +220,19 @@ export default function SorteioQuick() {
     }
 
     setIsDrawing(true);
+    setMensagemRodizio(null);
 
     setTimeout(() => {
-      // Determina tamanho balanceado por time (para nunca ficar 6 contra 1 caso haja poucos atletas)
-      const tamanhoEfetivo = Math.min(playersPerTeam, Math.floor(presentes.length / 2));
+      // Determina tamanho balanceado por time
+      const tamanhoEfetivo = Math.min(numberOfPlayers, Math.floor(presentes.length / 2));
 
       // Aplica sortearTimes oficial do Evento
-      const timesSorteados = sortearTimes(presentes, tamanhoEfetivo, 2);
+      const timesSorteados = sortearTimes(presentes, tamanhoEfetivo, 2, useRating);
 
       const tA = (timesSorteados[0] || []).map((p) => ({ ...p, prioridade: 0 }));
       const tB = (timesSorteados[1] || []).map((p) => ({ ...p, prioridade: 0 }));
 
-      // Quem ficou de fora inicialmente recebe prioridade 1 (igual ao Cenário 01 do Evento)
+      // Quem ficou de fora inicialmente recebe prioridade 1
       const jogandoIds = new Set([...tA.map((p) => p.id), ...tB.map((p) => p.id)]);
       const listaComPrioridade: QuickParticipante[] = participantes.map((p) => {
         if (p.checked) {
@@ -248,7 +257,7 @@ export default function SorteioQuick() {
     }, 1000);
   };
 
-  // Finalizar a partida ativa aplicando exatamente a regra e prioridades do Evento
+  // Finalizar a partida ativa aplicando exatamente a regra de vitórias (Mesclar / Remover)
   const handleFinalizarPartida = () => {
     if (placarA === placarB) {
       alert('A partida terminou empatada! Marque o ponto de desempate para finalizar.');
@@ -258,6 +267,7 @@ export default function SorteioQuick() {
     const time1Venceu = placarA > placarB;
     const timeVencedor = time1Venceu ? timeA : timeB;
     const timePerdedor = time1Venceu ? timeB : timeA;
+    const novasVitoriasVencedor = (time1Venceu ? vitoriasA : vitoriasB) + 1;
 
     // 1. Grava no histórico
     const novaPartida: PartidaHistorico = {
@@ -270,36 +280,94 @@ export default function SorteioQuick() {
     };
     setHistoricoPartidas((prev) => [...prev, novaPartida]);
 
-    // 2. Aplica subirPrioridade e selecionarProximosJogadores idêntico ao Evento
-    let novosParticipantes = subirPrioridade(participantes, timeVencedor, timePerdedor);
-
-    // O tamanho do time entrante deve ser EXATAMENTE igual ao time que venceu
     const tamanhoDoTime = timeVencedor.length;
+    let novosParticipantes = [...participantes];
 
-    const { selecionados: novoTime, novosParticipantes: finalParticipantes } = selecionarProximosJogadores(
-      novosParticipantes,
-      timeVencedor,
-      tamanhoDoTime
-    );
+    // 2. VERIFICA SE ATINGIU O LIMITE DE VITÓRIAS CONSECUTIVAS
+    if (novasVitoriasVencedor >= maxNumberOfVictories) {
+      if (actionAfterVictories === ActionAfterVictories.Remover) {
+        // REMOVER AMBOS: O vencedor e o perdedor vão para a fila, entram 2 novos times
+        novosParticipantes = subirPrioridade(novosParticipantes, timeVencedor, timePerdedor);
+        novosParticipantes = subirPrioridade(novosParticipantes, [], timeVencedor);
 
-    const activeNovoTime = novoTime.map((p) => ({ ...p, prioridade: 0 }));
-    activeNovoTime.sort((a, b) => a.nome.localeCompare(b.nome));
+        const { selecionados: novoTime1, novosParticipantes: tempParticipantes } = selecionarProximosJogadores(
+          novosParticipantes,
+          [],
+          tamanhoDoTime
+        );
+        const { selecionados: novoTime2, novosParticipantes: finalParticipantes } = selecionarProximosJogadores(
+          tempParticipantes,
+          novoTime1,
+          tamanhoDoTime
+        );
 
-    const activeVencedor = timeVencedor.map((p) => ({ ...p, prioridade: 0 }));
+        const activeT1 = novoTime1.map((p) => ({ ...p, prioridade: 0 }));
+        const activeT2 = novoTime2.map((p) => ({ ...p, prioridade: 0 }));
+        activeT1.sort((a, b) => a.nome.localeCompare(b.nome));
+        activeT2.sort((a, b) => a.nome.localeCompare(b.nome));
 
-    if (time1Venceu) {
-      setTimeA(activeVencedor);
-      setTimeB(activeNovoTime);
-      setVitoriasA((v) => v + 1);
-      setVitoriasB(0);
+        setTimeA(activeT1);
+        setTimeB(activeT2);
+        setVitoriasA(0);
+        setVitoriasB(0);
+        setParticipantes(finalParticipantes as QuickParticipante[]);
+        setMensagemRodizio(`👑 Limite de ${maxNumberOfVictories} vitórias atingido! Ambos os times saíram e novos times entraram.`);
+      } else {
+        // MESCLAR: O perdedor vai para a fila, seleciona os entrantes e MISTURA com o time vencedor
+        novosParticipantes = subirPrioridade(novosParticipantes, timeVencedor, timePerdedor);
+
+        const { selecionados: novoTime, novosParticipantes: finalParticipantes } = selecionarProximosJogadores(
+          novosParticipantes,
+          timeVencedor,
+          tamanhoDoTime
+        );
+
+        const misturarFila = [...timeVencedor, ...novoTime];
+        const novosTimesSorteados = sortearTimes(misturarFila, tamanhoDoTime, 2, useRating);
+
+        const t1 = novosTimesSorteados[0].map((p) => ({ ...p, prioridade: 0 }));
+        const t2 = novosTimesSorteados[1].map((p) => ({ ...p, prioridade: 0 }));
+        t1.sort((a, b) => a.nome.localeCompare(b.nome));
+        t2.sort((a, b) => a.nome.localeCompare(b.nome));
+
+        setTimeA(t1);
+        setTimeB(t2);
+        setVitoriasA(0);
+        setVitoriasB(0);
+        setParticipantes(finalParticipantes as QuickParticipante[]);
+        setMensagemRodizio(`🔀 Limite de ${maxNumberOfVictories} vitórias atingido! O time vencedor foi mesclado com os próximos da fila.`);
+      }
     } else {
-      setTimeA(activeNovoTime);
-      setTimeB(activeVencedor);
-      setVitoriasA(0);
-      setVitoriasB((v) => v + 1);
+      // REGRA PADRÃO (QUEM GANHA FICA):
+      novosParticipantes = subirPrioridade(novosParticipantes, timeVencedor, timePerdedor);
+
+      const { selecionados: novoTime, novosParticipantes: finalParticipantes } = selecionarProximosJogadores(
+        novosParticipantes,
+        timeVencedor,
+        tamanhoDoTime
+      );
+
+      const activeNovoTime = novoTime.map((p) => ({ ...p, prioridade: 0 }));
+      activeNovoTime.sort((a, b) => a.nome.localeCompare(b.nome));
+
+      const activeVencedor = timeVencedor.map((p) => ({ ...p, prioridade: 0 }));
+
+      if (time1Venceu) {
+        setTimeA(activeVencedor);
+        setTimeB(activeNovoTime);
+        setVitoriasA(novasVitoriasVencedor);
+        setVitoriasB(0);
+      } else {
+        setTimeA(activeNovoTime);
+        setTimeB(activeVencedor);
+        setVitoriasA(0);
+        setVitoriasB(novasVitoriasVencedor);
+      }
+
+      setParticipantes(finalParticipantes as QuickParticipante[]);
+      setMensagemRodizio(null);
     }
 
-    setParticipantes(finalParticipantes as QuickParticipante[]);
     setPlacarA(0);
     setPlacarB(0);
     setNumeroPartida((n) => n + 1);
@@ -350,7 +418,7 @@ export default function SorteioQuick() {
     else setTimeB((prev) => [...prev, { ...jogador, prioridade: 0 }]);
   };
 
-  // Jogadores na fila de espera (presentes que não estão no Time A nem no Time B)
+  // Jogadores na fila de espera
   const jogandoIds = new Set([...timeA.map((p) => p.id), ...timeB.map((p) => p.id)]);
   const filaEspera = participantes.filter((p) => p.checked && !jogandoIds.has(p.id));
 
@@ -358,7 +426,7 @@ export default function SorteioQuick() {
   const { selecionados: proximoTimeEstimado } = selecionarProximosJogadores(
     participantes,
     [...timeA, ...timeB],
-    timeA.length || playersPerTeam
+    timeA.length || numberOfPlayers
   );
 
   // Compartilhar placar atual
@@ -448,15 +516,27 @@ export default function SorteioQuick() {
           </div>
         </div>
 
-        {isJogoAtivo && (
+        <div className="flex items-center gap-1.5">
+          {/* Botão de Configurações */}
           <button
             type="button"
-            onClick={() => setShowEncerrarModal(true)}
-            className="px-2.5 py-1.5 bg-slate-100 hover:bg-red-50 hover:text-red-650 text-slate-600 rounded-xl text-xs font-black transition-all cursor-pointer"
+            onClick={() => setShowConfigModal(true)}
+            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer"
+            title="Configurações da Partida"
           >
-            Encerrar
+            <Settings size={18} />
           </button>
-        )}
+
+          {isJogoAtivo && (
+            <button
+              type="button"
+              onClick={() => setShowEncerrarModal(true)}
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-red-50 hover:text-red-650 text-slate-600 rounded-xl text-xs font-black transition-all cursor-pointer"
+            >
+              Encerrar
+            </button>
+          )}
+        </div>
       </div>
 
       {/* AVISO DE RANKING (Sempre visível para transparência ao usuário) */}
@@ -471,6 +551,14 @@ export default function SorteioQuick() {
           </p>
         </div>
       </div>
+
+      {/* BANNER DE AÇÃO AO ATINGIR LIMITE DE VITÓRIAS */}
+      {mensagemRodizio && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 text-xs font-bold text-left mb-4 flex items-center gap-2 animate-in fade-in">
+          <Sparkles size={16} className="text-emerald-600 shrink-0" />
+          <span>{mensagemRodizio}</span>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* SE O JOGO ESTIVER ATIVO: DINÂMICA IDÊNTICA AO EVENTO (PLACAR + PRÓXIMOS) */}
@@ -532,7 +620,9 @@ export default function SorteioQuick() {
                     <Plus size={14} />
                   </button>
                 </div>
-                <p className="text-[10px] font-bold text-slate-400">Vitórias seguidas: {vitoriasA}</p>
+                <p className="text-[10px] font-bold text-slate-400">
+                  Vitórias: {vitoriasA}/{maxNumberOfVictories}
+                </p>
               </div>
 
               {/* Divisor X e Indicador de Equilíbrio */}
@@ -573,8 +663,17 @@ export default function SorteioQuick() {
                     <Plus size={14} />
                   </button>
                 </div>
-                <p className="text-[10px] font-bold text-slate-400">Vitórias seguidas: {vitoriasB}</p>
+                <p className="text-[10px] font-bold text-slate-400">
+                  Vitórias: {vitoriasB}/{maxNumberOfVictories}
+                </p>
               </div>
+            </div>
+
+            {/* Regra de Rodízio Ativa */}
+            <div className="text-center bg-slate-50 py-1.5 px-3 rounded-xl border border-slate-150">
+              <span className="text-[10px] font-extrabold text-slate-600">
+                Regra: {maxNumberOfVictories} vitórias seguidas → {actionAfterVictories === ActionAfterVictories.Mesclar ? 'Mesclar Time' : 'Remover Ambos'}
+              </span>
             </div>
 
             {/* ESCALAÇÃO DOS DOIS TIMES EM QUADRA */}
@@ -644,7 +743,7 @@ export default function SorteioQuick() {
               </div>
             </div>
 
-            {/* BOTÃO FINALIZAR PARTIDA E RODAR A QUADRA */}
+            {/* BOTÃO FINALIZAR PARTIDA */}
             <div className="pt-2 flex flex-col gap-2">
               <button
                 type="button"
@@ -717,7 +816,7 @@ export default function SorteioQuick() {
               )}
             </div>
 
-            {/* Estimativa do Próximo Time (com algoritmo do Evento) */}
+            {/* Estimativa do Próximo Time */}
             {proximoTimeEstimado.length > 0 && (
               <div className="p-2.5 bg-amber-50/60 rounded-2xl border border-amber-200 space-y-1.5">
                 <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider block">
@@ -876,40 +975,26 @@ export default function SorteioQuick() {
             </p>
           </form>
 
-          {/* Configurações do Sorteio */}
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left space-y-3 shadow-xs">
-            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-200 pb-2">
-              <Sparkles size={14} className="text-red-500" />
-              Configurações da Partida
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Jogadores / Time</label>
-                <select
-                  value={playersPerTeam}
-                  onChange={(e) => setPlayersPerTeam(Number(e.target.value))}
-                  className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-slate-900 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-red-500/20 cursor-pointer"
-                >
-                  {[2, 3, 4, 5, 6, 7, 8, 11].map((n) => (
-                    <option key={n} value={n}>
-                      {n} vs {n} ({n * 2} em quadra)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Tipo de Sorteio</label>
-                <select
-                  value={sortMode}
-                  onChange={(e) => setSortMode(e.target.value as 'balanced' | 'random')}
-                  className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-slate-900 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-red-500/20 cursor-pointer"
-                >
-                  <option value="balanced">⚖️ Equilibrado (Estrelas)</option>
-                  <option value="random">🎲 Aleatório (Sorte Pura)</option>
-                </select>
-              </div>
+          {/* Botão de Atalho para Configurações Pré-Sorteio */}
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-left space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Settings size={14} className="text-red-500" />
+                Regras da Partida
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowConfigModal(true)}
+                className="text-xs font-bold text-red-650 hover:underline cursor-pointer"
+              >
+                Ajustar
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 font-semibold">
+              <div>• {numberOfPlayers} jogadores por time</div>
+              <div>• Máx. {maxNumberOfVictories} vitórias seguidas</div>
+              <div>• Ação: {actionAfterVictories === ActionAfterVictories.Mesclar ? 'Mesclar' : 'Remover Ambos'}</div>
+              <div>• {useRating ? 'Com Rating (Estrelas)' : 'Sorteio Puro'}</div>
             </div>
           </div>
 
@@ -921,7 +1006,7 @@ export default function SorteioQuick() {
                   Lista de Atletas ({participantes.length})
                 </h3>
                 <span className="text-[10px] font-bold text-slate-400 block mt-0.5">
-                  Presentes: {participantes.filter((m) => m.checked).length} (Necessários: {playersPerTeam * 2})
+                  Presentes: {participantes.filter((m) => m.checked).length} (Necessários: {numberOfPlayers * 2})
                 </span>
               </div>
 
@@ -1033,6 +1118,124 @@ export default function SorteioQuick() {
               </>
             )}
           </button>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL DE CONFIGURAÇÕES (IDÊNTICO AO EVENTO) */}
+      {/* ========================================================================= */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100 text-left">
+            <div className="flex justify-between items-center border-b border-slate-150 pb-3">
+              <h3 className="font-black text-slate-900 text-base">Configurações</h3>
+              <button
+                type="button"
+                onClick={() => setShowConfigModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Slider: Número de Jogadores por Time */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                  Número de Jogadores por Time: {numberOfPlayers}
+                </label>
+                <input
+                  type="range"
+                  min="2"
+                  max="15"
+                  value={numberOfPlayers}
+                  onChange={(e) => setNumberOfPlayers(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-650"
+                />
+              </div>
+
+              {/* Slider: Limite de Vitórias Consecutivas */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                  Limite de Vitórias Consecutivas: {maxNumberOfVictories}
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={maxNumberOfVictories}
+                  onChange={(e) => setMaxNumberOfVictories(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-650"
+                />
+              </div>
+
+              {/* Botões: Ação ao Atingir Limite de Vitórias */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                  Ação ao Atingir Limite de Vitórias
+                </label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setActionAfterVictories(ActionAfterVictories.Mesclar)}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                      actionAfterVictories === ActionAfterVictories.Mesclar
+                        ? 'bg-red-650 border-red-600 text-white shadow-sm'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Mesclar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActionAfterVictories(ActionAfterVictories.Remover)}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                      actionAfterVictories === ActionAfterVictories.Remover
+                        ? 'bg-red-650 border-red-600 text-white shadow-sm'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Remover Ambos
+                  </button>
+                </div>
+              </div>
+
+              {/* Checkbox: Equilibrar por Avaliação (Rating) */}
+              <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
+                <span className="text-xs font-bold text-slate-700">Equilibrar por Avaliação (Rating)</span>
+                <input
+                  type="checkbox"
+                  checked={useRating}
+                  onChange={(e) => setUseRating(e.target.checked)}
+                  className="w-4 h-4 rounded text-red-650 border-slate-300 focus:ring-red-500 cursor-pointer"
+                />
+              </label>
+            </div>
+
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConfigModal(false)}
+                className="w-full py-3 bg-gradient-to-r from-red-650 to-red-700 hover:from-red-600 hover:to-red-750 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center"
+              >
+                Salvar
+              </button>
+
+              {isJogoAtivo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowConfigModal(false);
+                    setShowEncerrarModal(true);
+                  }}
+                  className="w-full py-2.5 border border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100/50 text-emerald-800 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 size={14} className="text-emerald-600" />
+                  <span>Encerrar Partida</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

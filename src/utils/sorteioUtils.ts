@@ -3,7 +3,8 @@ import type { Participante } from '../types';
 export function sortearTimes(
   participantes: Participante[],
   numberOfPlayers: number,
-  numberOfTeams: number
+  numberOfTeams: number,
+  useRating: boolean = true
 ): Participante[][] {
   const jogadoresRandomizados = randomizarJogadores(participantes);
 
@@ -17,8 +18,10 @@ export function sortearTimes(
   const sortedByRanking = jogadoresRandomizados.slice(0, totalPlayersToSort);
   const remaining = jogadoresRandomizados.slice(totalPlayersToSort);
   
-  // Ordena por avaliação (rating) de forma decrescente para equilibrar os times
-  sortedByRanking.sort((a, b) => b.avaliacao - a.avaliacao);
+  // Ordena por avaliação (rating) de forma decrescente se useRating for true
+  if (useRating) {
+    sortedByRanking.sort((a, b) => b.avaliacao - a.avaliacao);
+  }
 
   const teams: Participante[][] = Array.from({ length: numberOfTeams }, () => []);
   
