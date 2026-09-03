@@ -36,7 +36,15 @@ export interface Torneio {
   chaveamento: TorneioConfronto[];
   status: 'rascunho' | 'sorteado' | 'em_andamento' | 'finalizado' | 'encerrado';
   campeao_id?: string;
-  created_at?: string;
+  comunidade_id?: string;
+  comunidade?: { id: string; nome: string };
+  comunidades?: { id: string; nome: string };
+  configuracao_jogos?: {
+    jogosPorDia: number;
+    diasSemana: number[]; // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+    horarioInicio: string; // Ex: '14:00'
+    intervaloMinutos: number; // Ex: 60
+  };
   modalidade?: { id: string; nome: string };
   modalidades?: { id: string; nome: string };
 }

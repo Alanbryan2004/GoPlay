@@ -57,6 +57,7 @@ export default function TorneioDetails() {
     match: TorneioConfronto;
     placarA: number;
     placarB: number;
+    dataHora?: string;
   } | null>(null);
 
   // Modal para Inscrever Time Fechado completo (Nome do Time + Jogadores)
@@ -75,6 +76,8 @@ export default function TorneioDetails() {
   // Edição de data/hora
   const [editInicio, setEditInicio] = useState('');
   const [editFim, setEditFim] = useState('');
+
+  const isAdmin = Boolean(currentUser && torneio && torneio.criador_id === currentUser.id);
 
   useEffect(() => {
     fetchTorneio();
@@ -599,6 +602,105 @@ export default function TorneioDetails() {
           placarA: 0,
           placarB: 0,
         });
+      } else if (numTimes <= 16) {
+        // Oitavas de Final -> Quartas -> Semis -> Final
+        for (let i = 0; i < 8; i++) {
+          novosConfrontos.push({
+            id: `match_oitavas_${i}_${Date.now()}`,
+            fase: 'Oitavas de Final',
+            rodada: 1,
+            timeA: timesEmbaralhados[i * 2],
+            timeB: timesEmbaralhados[i * 2 + 1],
+            placarA: 0,
+            placarB: 0,
+          });
+        }
+        for (let i = 0; i < 4; i++) {
+          novosConfrontos.push({
+            id: `match_quartas_${i}_${Date.now()}`,
+            fase: 'Quartas de Final',
+            rodada: 2,
+            timeA: { id: `pending_oitavas_${i * 2}`, nome: `Vencedor O${i * 2 + 1}` },
+            timeB: { id: `pending_oitavas_${i * 2 + 1}`, nome: `Vencedor O${i * 2 + 2}` },
+            placarA: 0,
+            placarB: 0,
+          });
+        }
+        for (let i = 0; i < 2; i++) {
+          novosConfrontos.push({
+            id: `match_semi_${i}_${Date.now()}`,
+            fase: 'Semifinal',
+            rodada: 3,
+            timeA: { id: `pending_q_${i * 2}`, nome: `Vencedor Q${i * 2 + 1}` },
+            timeB: { id: `pending_q_${i * 2 + 1}`, nome: `Vencedor Q${i * 2 + 2}` },
+            placarA: 0,
+            placarB: 0,
+          });
+        }
+        novosConfrontos.push({
+          id: `match_final_0_${Date.now()}`,
+          fase: 'Final',
+          rodada: 4,
+          timeA: { id: 'pending_semi_0', nome: 'Vencedor Semi 1' },
+          timeB: { id: 'pending_semi_1', nome: 'Vencedor Semi 2' },
+          placarA: 0,
+          placarB: 0,
+        });
+      } else {
+        // 32 times: 16 avos de Final -> Oitavas -> Quartas -> Semis -> Final
+        for (let i = 0; i < 16; i++) {
+          novosConfrontos.push({
+            id: `match_16avos_${i}_${Date.now()}`,
+            fase: '16 avos de Final',
+            rodada: 1,
+            timeA: timesEmbaralhados[i * 2],
+            timeB: timesEmbaralhados[i * 2 + 1],
+            placarA: 0,
+            placarB: 0,
+          });
+        }
+        for (let i = 0; i < 8; i++) {
+          novosConfrontos.push({
+            id: `match_oitavas_${i}_${Date.now()}`,
+            fase: 'Oitavas de Final',
+            rodada: 2,
+            timeA: { id: `pending_16avos_${i * 2}`, nome: `Vencedor 16A_${i * 2 + 1}` },
+            timeB: { id: `pending_16avos_${i * 2 + 1}`, nome: `Vencedor 16A_${i * 2 + 2}` },
+            placarA: 0,
+            placarB: 0,
+          });
+        }
+        for (let i = 0; i < 4; i++) {
+          novosConfrontos.push({
+            id: `match_quartas_${i}_${Date.now()}`,
+            fase: 'Quartas de Final',
+            rodada: 3,
+            timeA: { id: `pending_oitavas_${i * 2}`, nome: `Vencedor O${i * 2 + 1}` },
+            timeB: { id: `pending_oitavas_${i * 2 + 1}`, nome: `Vencedor O${i * 2 + 2}` },
+            placarA: 0,
+            placarB: 0,
+          });
+        }
+        for (let i = 0; i < 2; i++) {
+          novosConfrontos.push({
+            id: `match_semi_${i}_${Date.now()}`,
+            fase: 'Semifinal',
+            rodada: 4,
+            timeA: { id: `pending_q_${i * 2}`, nome: `Vencedor Q${i * 2 + 1}` },
+            timeB: { id: `pending_q_${i * 2 + 1}`, nome: `Vencedor Q${i * 2 + 2}` },
+            placarA: 0,
+            placarB: 0,
+          });
+        }
+        novosConfrontos.push({
+          id: `match_final_0_${Date.now()}`,
+          fase: 'Final',
+          rodada: 5,
+          timeA: { id: 'pending_semi_0', nome: 'Vencedor Semi 1' },
+          timeB: { id: 'pending_semi_1', nome: 'Vencedor Semi 2' },
+          placarA: 0,
+          placarB: 0,
+        });
       }
     } else {
       const n = timesEmbaralhados.length;
@@ -679,7 +781,7 @@ export default function TorneioDetails() {
     })();
   };
 
-  const handleAtualizarPlacar = async (matchId: string, pA: number, pB: number) => {
+  const handleAtualizarPlacar = async (matchId: string, pA: number, pB: number, novaDataHora?: string) => {
     if (!torneio) return;
 
     let novosConfrontos = torneio.chaveamento.map((c) => {
@@ -687,7 +789,13 @@ export default function TorneioDetails() {
         let vencedorId: string | undefined = undefined;
         if (pA > pB) vencedorId = c.timeA.id;
         if (pB > pA) vencedorId = c.timeB.id;
-        return { ...c, placarA: pA, placarB: pB, vencedorId };
+        return {
+          ...c,
+          placarA: pA,
+          placarB: pB,
+          vencedorId,
+          dataHora: novaDataHora !== undefined ? novaDataHora : c.dataHora,
+        };
       }
       return c;
     });
@@ -753,6 +861,50 @@ export default function TorneioDetails() {
                 if (isTeamA) updatedSemi.timeA = timeVencedor;
                 else updatedSemi.timeB = timeVencedor;
                 novosConfrontos[globalIndex] = updatedSemi;
+              }
+            }
+          }
+        }
+        // Se for Oitavas de Final, atualiza as Quartas de Final correspondentes
+        else if (faseAtual === 'Oitavas de Final') {
+          const oitavas = novosConfrontos.filter((m) => m.fase === 'Oitavas de Final');
+          const indexOitavas = oitavas.findIndex((m) => m.id === matchId);
+          const quartas = novosConfrontos.filter((m) => m.fase === 'Quartas de Final');
+
+          if (indexOitavas !== -1) {
+            const targetQuartasIndex = Math.floor(indexOitavas / 2);
+            const isTeamA = indexOitavas % 2 === 0;
+
+            if (quartas[targetQuartasIndex]) {
+              const targetQuartasId = quartas[targetQuartasIndex].id;
+              const globalIndex = novosConfrontos.findIndex((m) => m.id === targetQuartasId);
+              if (globalIndex !== -1) {
+                const updatedQuartas = { ...novosConfrontos[globalIndex] };
+                if (isTeamA) updatedQuartas.timeA = timeVencedor;
+                else updatedQuartas.timeB = timeVencedor;
+                novosConfrontos[globalIndex] = updatedQuartas;
+              }
+            }
+          }
+        }
+        // Se for 16 avos de Final, atualiza as Oitavas de Final correspondentes
+        else if (faseAtual === '16 avos de Final') {
+          const dezenove = novosConfrontos.filter((m) => m.fase === '16 avos de Final');
+          const index16 = dezenove.findIndex((m) => m.id === matchId);
+          const oitavas = novosConfrontos.filter((m) => m.fase === 'Oitavas de Final');
+
+          if (index16 !== -1) {
+            const targetOitavasIndex = Math.floor(index16 / 2);
+            const isTeamA = index16 % 2 === 0;
+
+            if (oitavas[targetOitavasIndex]) {
+              const targetOitavasId = oitavas[targetOitavasIndex].id;
+              const globalIndex = novosConfrontos.findIndex((m) => m.id === targetOitavasId);
+              if (globalIndex !== -1) {
+                const updatedOitavas = { ...novosConfrontos[globalIndex] };
+                if (isTeamA) updatedOitavas.timeA = timeVencedor;
+                else updatedOitavas.timeB = timeVencedor;
+                novosConfrontos[globalIndex] = updatedOitavas;
               }
             }
           }
@@ -1342,8 +1494,14 @@ export default function TorneioDetails() {
                             key={match.id}
                             className="glass p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3"
                           >
-                            <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
-                              <span>{match.fase}</span>
+                            <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400 gap-1.5 flex-wrap">
+                              <span className="text-slate-700 font-extrabold">{match.fase}</span>
+                              {match.dataHora && (
+                                <span className="flex items-center gap-1 text-slate-700 bg-slate-100 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                                  <Calendar size={11} className="text-red-500" />
+                                  <span>{dayjs(match.dataHora).format('DD/MM (ddd) • HH:mm')}</span>
+                                </span>
+                              )}
                               {isFinalizado ? (
                                 <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Partida Encerrada</span>
                               ) : (
@@ -1419,12 +1577,13 @@ export default function TorneioDetails() {
                                       match,
                                       placarA: match.placarA || 0,
                                       placarB: match.placarB || 0,
+                                      dataHora: match.dataHora || '',
                                     });
                                   }}
                                   className="w-full py-2 bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                                 >
                                   <Play size={14} />
-                                  <span>Iniciar Partida</span>
+                                  <span>{match.dataHora ? 'Gerenciar Jogo / Placar' : 'Iniciar Partida'}</span>
                                 </button>
                               </div>
                             )}
@@ -2133,18 +2292,42 @@ export default function TorneioDetails() {
                 </div>
               </div>
 
+              {/* Edição de Data e Horário da Partida (Admin) */}
+              {isAdmin && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5 text-left">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                    <Calendar size={12} className="text-red-500" />
+                    <span>Data e Horário Desta Partida</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={activeMatch.dataHora || ''}
+                    onChange={(e) => setActiveMatch({ ...activeMatch, dataHora: e.target.value })}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-800"
+                  />
+                  <p className="text-[9px] text-slate-400 leading-tight">
+                    * O Admin pode definir ou reagendar a data e o horário deste jogo a qualquer momento.
+                  </p>
+                </div>
+              )}
+
               {/* Botão Finalizar Partida */}
               <div className="pt-2">
                 <button
                   type="button"
                   onClick={async () => {
-                    await handleAtualizarPlacar(activeMatch.match.id, activeMatch.placarA, activeMatch.placarB);
+                    await handleAtualizarPlacar(
+                      activeMatch.match.id,
+                      activeMatch.placarA,
+                      activeMatch.placarB,
+                      activeMatch.dataHora
+                    );
                     setActiveMatch(null);
                   }}
                   className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-2xl font-black text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <CheckCircle2 size={16} />
-                  <span>Finalizar Partida e Salvar Placar</span>
+                  <span>Salvar Placar e Data</span>
                 </button>
               </div>
             </div>
