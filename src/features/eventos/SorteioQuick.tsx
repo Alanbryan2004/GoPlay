@@ -663,9 +663,7 @@ export default function SorteioQuick() {
                 className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black rounded-2xl text-xs shadow-md active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CheckCircle2 size={16} />
-                <span>
-                  Finalizar Partida #{numeroPartida} & Chamar Próximos
-                </span>
+                <span>Finalizar Partida</span>
               </button>
 
               <div className="flex gap-2">
