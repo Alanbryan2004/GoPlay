@@ -246,23 +246,26 @@ export default function AmigosList() {
     .filter((u) => u.nome.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="px-4 py-3 pb-24 w-full max-w-md mx-auto min-h-[calc(100vh-8rem)]">
-      {/* Alinha o título perfeitamente ao lado do botão de menu flutuante */}
-      <div className="flex justify-between items-center mb-4 pl-14 h-11">
-        <h1 className="text-2xl font-black text-slate-900 leading-none">Amigos</h1>
-      </div>
+    <div className="px-4 pb-24 w-full max-w-md mx-auto min-h-[calc(100vh-8rem)]">
+      {/* Topo fixo / sticky que fica sempre visível durante a rolagem */}
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md pt-2 pb-3 mb-4 -mx-4 px-4 border-b border-slate-100 shadow-xs">
+        {/* Alinha o título perfeitamente ao lado do botão de menu flutuante */}
+        <div className="flex justify-between items-center mb-3 pl-14 h-11">
+          <h1 className="text-2xl font-black text-slate-900 leading-none">Amigos</h1>
+        </div>
 
-      <div className="relative mb-5">
-        <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-          <Search size={18} />
-        </span>
-        <input
-          type="text"
-          placeholder="Buscar parceiros..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition-all text-sm"
-        />
+        <div className="relative">
+          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+            <Search size={18} />
+          </span>
+          <input
+            type="text"
+            placeholder="Buscar parceiros..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition-all text-sm shadow-xs"
+          />
+        </div>
       </div>
 
       {/* Solicitações de Amizade Recebidas */}
