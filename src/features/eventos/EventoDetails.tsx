@@ -73,6 +73,8 @@ export default function EventoDetails() {
   const [showSubstituirModal, setShowSubstituirModal] = useState(false);
   const [substituirTarget, setSubstituirTarget] = useState<{ timeIndex: 1 | 2; slotIndex: number } | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any | null>(null);
+  const [meusGruposDisponiveis, setMeusGruposDisponiveis] = useState<{ id: string; nome: string }[]>([]);
+  const [selectedGrupoId, setSelectedGrupoId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -143,11 +145,16 @@ export default function EventoDetails() {
 
         const { data: meusGrupos } = await supabase
           .from('membros_grupo')
-          .select('grupo_id')
+          .select('grupo_id, grupos(id, nome)')
           .eq('usuario_id', loggedId)
           .eq('status', 'aprovado');
 
         if (meusGrupos && meusGrupos.length > 0) {
+          const parsedGrupos = meusGrupos
+            .map((mg: any) => mg.grupos)
+            .filter(Boolean) as { id: string; nome: string }[];
+          setMeusGruposDisponiveis(parsedGrupos);
+
           const grupoIds = meusGrupos.map((mg) => mg.grupo_id);
 
           const { data: dbMembros } = await supabase
@@ -409,6 +416,7 @@ export default function EventoDetails() {
         setVitoriasTime1(data.vitorias_time1 || 0);
         setVitoriasTime2(data.vitorias_time2 || 0);
         if (data.configuracao) setConfig(data.configuracao);
+        setSelectedGrupoId(data.grupo_id || null);
 
         // Só abrir o modal do Pódio automaticamente se a URL contiver explicitamente ?show_result=true (ex: ao clicar na notificação)
         const searchParams = new URLSearchParams(window.location.search);
@@ -1044,7 +1052,8 @@ export default function EventoDetails() {
 
   // Salvar configurações
   const handleSaveConfig = () => {
-    updateDatabase({ configuracao: config });
+    updateDatabase({ configuracao: config, grupo_id: selectedGrupoId || undefined } as any);
+    setEvento((prev) => (prev ? { ...prev, grupo_id: selectedGrupoId || undefined } : null));
     setShowConfig(false);
   };
 
@@ -2272,6 +2281,33 @@ export default function EventoDetails() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Vincular a um Grupo */}
+              <div className="space-y-1.5 p-3 bg-slate-50 border border-slate-200 rounded-xl text-left">
+                <label className="text-xs font-bold text-slate-700 uppercase flex items-center justify-between">
+                  <span>Grupo Vinculado</span>
+                  {selectedGrupoId && (
+                    <span className="text-[9px] font-bold text-emerald-650 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      Pontua no Ranking
+                    </span>
+                  )}
+                </label>
+                <select
+                  value={selectedGrupoId || ''}
+                  onChange={(e) => setSelectedGrupoId(e.target.value || null)}
+                  className="w-full bg-white border border-slate-250 rounded-xl py-2 px-3 text-xs text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-red-500/30 shadow-2xs"
+                >
+                  <option value="">Nenhum (Evento Público / Avulso)</option>
+                  {meusGruposDisponiveis.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.nome}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-450 leading-tight">
+                  Ao vincular o evento a um grupo, as vitórias disputadas aqui serão contabilizadas na Classificação do grupo!
+                </p>
               </div>
             </div>
 
