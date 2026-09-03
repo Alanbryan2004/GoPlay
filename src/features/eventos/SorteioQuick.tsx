@@ -1150,7 +1150,7 @@ export default function SorteioQuick() {
                   max="15"
                   value={numberOfPlayers}
                   onChange={(e) => setNumberOfPlayers(parseInt(e.target.value))}
-                  className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-650"
+                  className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-600"
                 />
               </div>
 
@@ -1165,7 +1165,7 @@ export default function SorteioQuick() {
                   max="10"
                   value={maxNumberOfVictories}
                   onChange={(e) => setMaxNumberOfVictories(parseInt(e.target.value))}
-                  className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-650"
+                  className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-600"
                 />
               </div>
 
@@ -1178,10 +1178,10 @@ export default function SorteioQuick() {
                   <button
                     type="button"
                     onClick={() => setActionAfterVictories(ActionAfterVictories.Mesclar)}
-                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-black transition-all cursor-pointer ${
                       actionAfterVictories === ActionAfterVictories.Mesclar
-                        ? 'bg-red-650 border-red-600 text-white shadow-sm'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        ? 'bg-red-600 border-red-600 text-white shadow-md'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
                     Mesclar
@@ -1189,10 +1189,10 @@ export default function SorteioQuick() {
                   <button
                     type="button"
                     onClick={() => setActionAfterVictories(ActionAfterVictories.Remover)}
-                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-black transition-all cursor-pointer ${
                       actionAfterVictories === ActionAfterVictories.Remover
-                        ? 'bg-red-650 border-red-600 text-white shadow-sm'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        ? 'bg-red-600 border-red-600 text-white shadow-md'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
                     Remover Ambos
@@ -1207,7 +1207,7 @@ export default function SorteioQuick() {
                   type="checkbox"
                   checked={useRating}
                   onChange={(e) => setUseRating(e.target.checked)}
-                  className="w-4 h-4 rounded text-red-650 border-slate-300 focus:ring-red-500 cursor-pointer"
+                  className="w-4 h-4 rounded text-red-600 border-slate-300 focus:ring-red-500 cursor-pointer"
                 />
               </label>
             </div>
@@ -1216,7 +1216,7 @@ export default function SorteioQuick() {
               <button
                 type="button"
                 onClick={() => setShowConfigModal(false)}
-                className="w-full py-3 bg-gradient-to-r from-red-650 to-red-700 hover:from-red-600 hover:to-red-750 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center"
+                className="w-full py-3.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-black rounded-xl shadow-lg active:scale-95 transition-all text-xs cursor-pointer text-center"
               >
                 Salvar
               </button>
