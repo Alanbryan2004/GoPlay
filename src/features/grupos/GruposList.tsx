@@ -361,41 +361,41 @@ export default function GruposList() {
     await fetchMembersOfSelectedGroup(grupo.id);
   };
 
-  // Buscar atletas cadastrados no banco ou filtrar amigos conforme o usuário digita o nome
+  // Buscar todos os usuários cadastrados na GoPlay que ainda não estão no grupo
   useEffect(() => {
     if (modalTab !== 'adicionar' || !selectedGrupo) return;
 
     const delayDebounce = setTimeout(async () => {
       const term = searchAtletaNome.trim();
-      if (term.length >= 2) {
-        setBuscandoUsuarios(true);
-        try {
-          // Buscar usuários com nome ou email compatível no Supabase
-          const { data, error } = await supabase
-            .from('usuarios')
-            .select('id, nome, foto, email')
-            .or(`nome.ilike.%${term}%,email.ilike.%${term}%`)
-            .limit(25);
+      setBuscandoUsuarios(true);
+      try {
+        let query = supabase
+          .from('usuarios')
+          .select('id, nome, foto, email')
+          .order('nome', { ascending: true })
+          .limit(100);
 
-          if (!error && data) {
-            // Filtrar quem já for membro ou já estiver convidado no grupo
-            const idsJaNoGrupo = new Set(membros.map((m) => m.usuario_id));
-            const filtrados = (data as Usuario[]).filter((u) => !idsJaNoGrupo.has(u.id));
-            setUsuariosBuscados(filtrados);
-          }
-        } catch (e) {
-          console.error('Erro na busca de usuários:', e);
-        } finally {
-          setBuscandoUsuarios(false);
+        if (term.length > 0) {
+          query = query.or(`nome.ilike.%${term}%,email.ilike.%${term}%`);
         }
-      } else {
-        // Se termo curto ou vazio, mostra os amigos disponíveis como sugestão inicial
-        setUsuariosBuscados(amigosParaAdicionar);
+
+        const { data, error } = await query;
+
+        if (!error && data) {
+          // Filtrar quem já for membro ou já estiver convidado no grupo
+          const idsJaNoGrupo = new Set(membros.map((m) => m.usuario_id));
+          const filtrados = (data as Usuario[]).filter((u) => !idsJaNoGrupo.has(u.id));
+          setUsuariosBuscados(filtrados);
+        }
+      } catch (e) {
+        console.error('Erro na busca de usuários:', e);
+      } finally {
+        setBuscandoUsuarios(false);
       }
-    }, 250);
+    }, 200);
 
     return () => clearTimeout(delayDebounce);
-  }, [searchAtletaNome, modalTab, selectedGrupo, membros, amigosParaAdicionar]);
+  }, [searchAtletaNome, modalTab, selectedGrupo, membros]);
 
   const fetchMembersOfSelectedGroup = async (grupoId: string) => {
     setLoadingMembros(true);
@@ -1519,7 +1519,7 @@ export default function GruposList() {
                 <div className="flex-1 overflow-y-auto space-y-2 pr-1 no-scrollbar min-h-48 max-h-72">
                   <div className="flex items-center justify-between px-1 mb-1">
                     <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
-                      {searchAtletaNome.trim().length >= 2 ? 'Resultados da Busca' : 'Amigos Sugeridos'}
+                      {searchAtletaNome.trim().length > 0 ? 'Resultados da Busca' : 'Usuários Go Play'}
                     </span>
                     <span className="text-[10px] font-bold text-slate-400">
                       {usuariosBuscados.length} disponíveis
@@ -1535,9 +1535,9 @@ export default function GruposList() {
                     <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 px-4 space-y-2">
                       <p className="text-xs font-bold text-slate-600">Nenhum atleta disponível encontrado</p>
                       <p className="text-[11px] text-slate-450">
-                        {searchAtletaNome.trim().length >= 2
-                          ? `Não encontramos nenhum usuário com "${searchAtletaNome}".`
-                          : 'Você não possui outros amigos pendentes.'}
+                        {searchAtletaNome.trim().length > 0
+                          ? `Não encontramos nenhum usuário cadastrado com "${searchAtletaNome}".`
+                          : 'Todos os usuários cadastrados já fazem parte deste grupo!'}
                       </p>
                       <p className="text-[10px] text-indigo-600 font-bold">
                         Dica: Envie o link acima pelo WhatsApp para ele se cadastrar!
