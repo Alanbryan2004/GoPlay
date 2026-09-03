@@ -204,34 +204,64 @@ export default function RankingList() {
         }
       }
 
-      if (users && events) {
-        // Criar um Set de IDs E nomes dos participantes para matching duplo
+      // 4. Buscar membros aprovados do grupo selecionado (para incluir todos no ranking)
+      let groupMemberUserIds = new Set<string>();
+      try {
+        let memQuery = supabase
+          .from('membros_grupo')
+          .select('usuario_id')
+          .eq('status', 'aprovado');
+
+        if (selectedGrupoId) {
+          memQuery = memQuery.eq('grupo_id', selectedGrupoId);
+        } else if (allowedGroupIds.length > 0) {
+          memQuery = memQuery.in('grupo_id', allowedGroupIds);
+        }
+
+        const { data: mems } = await memQuery;
+        if (mems) {
+          groupMemberUserIds = new Set(mems.map((m: any) => m.usuario_id));
+        }
+      } catch (err) {
+        console.error('Erro ao buscar membros do grupo para o ranking:', err);
+      }
+
+      if (users) {
+        // Criar um Set de IDs E nomes dos participantes dos eventos
         const participatedPlayerIds = new Set<string>();
         const participatedPlayerNames = new Set<string>();
-        events.forEach((event: any) => {
-          if (Array.isArray(event.participantes)) {
-            event.participantes.forEach((p: any) => {
-              if (p.id) participatedPlayerIds.add(p.id);
-              if (p.nome) participatedPlayerNames.add(p.nome.trim().toLowerCase());
-            });
-          }
-        });
+        if (events) {
+          events.forEach((event: any) => {
+            if (Array.isArray(event.participantes)) {
+              event.participantes.forEach((p: any) => {
+                if (p.id) participatedPlayerIds.add(p.id);
+                if (p.nome) participatedPlayerNames.add(p.nome.trim().toLowerCase());
+              });
+            }
+          });
+        }
 
-        // Filtrar usuários que participaram — primeiro por ID (preciso), depois por nome (fallback)
-        const ranked: PlayerRank[] = users
-          .filter((user) =>
+        // Filtrar usuários elegíveis: Membros do grupo OU quem participou de partidas
+        const eligibleUsers = users.filter((user) => {
+          if (groupMemberUserIds.size > 0) {
+            return groupMemberUserIds.has(user.id) || participatedPlayerIds.has(user.id);
+          }
+          // Caso não haja filtro por grupo específico, exibe quem participou de eventos
+          return (
             participatedPlayerIds.has(user.id) ||
             participatedPlayerNames.has(user.nome?.trim().toLowerCase())
-          )
-          .map((user) => {
-            let totalVitorias = 0;
-            const ratings: number[] = [];
+          );
+        });
 
-            // Percorre os eventos filtrados para somar as vitórias e avaliações do jogador
+        const ranked: PlayerRank[] = eligibleUsers.map((user) => {
+          let totalVitorias = 0;
+          const ratings: number[] = [];
+
+          // Percorre os eventos filtrados para somar as vitórias e avaliações do jogador
+          if (events) {
             events.forEach((event: any) => {
               const participantes = event.participantes;
               if (Array.isArray(participantes)) {
-                // Busca por ID primeiro (mais confiável), depois por nome como fallback
                 const p =
                   participantes.find((part) => part.id === user.id) ||
                   participantes.find(
@@ -245,30 +275,29 @@ export default function RankingList() {
                 }
               }
             });
+          }
 
-            // Calcula a nota (se estiver totalmente filtrado por Grupo + Modalidade, usar a tabela consolidada;
-            // caso contrário, calcula a média histórica das avaliações das partidas como fallback)
-            let mediaRating = 3.0;
-            if (selectedGrupoId && selectedModalidadeId) {
-              const rRow = ratingRows.find((r) => r.usuario_id === user.id);
-              if (rRow) {
-                mediaRating = Number(rRow.rating);
-              }
-            } else {
-              mediaRating =
-                ratings.length > 0
-                  ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
-                  : 3.0;
+          // Calcula a nota (se estiver totalmente filtrado por Grupo + Modalidade, usar a tabela consolidada;
+          // caso contrário, calcula a média histórica das avaliações das partidas como fallback)
+          let mediaRating = 3.0;
+          if (selectedGrupoId && selectedModalidadeId) {
+            const rRow = ratingRows.find((r) => r.usuario_id === user.id);
+            if (rRow) {
+              mediaRating = Number(rRow.rating);
             }
+          } else {
+            mediaRating =
+              ratings.length > 0
+                ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
+                : 3.0;
+          }
 
-            return {
-              ...user,
-              vitorias: totalVitorias,
-              rating: mediaRating,
-            };
-          })
-          // Remover usuários sem nenhuma vitória E sem rating registrado (evitar fantasmas no ranking)
-          .filter((u) => u.vitorias > 0 || ratingRows.some((r) => r.usuario_id === u.id));
+          return {
+            ...user,
+            vitorias: totalVitorias,
+            rating: mediaRating,
+          };
+        });
 
         // Ordena por número de vitórias decrescente, depois por rating e por fim nome alfabético
         ranked.sort((a, b) => {
