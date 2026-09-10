@@ -91,11 +91,15 @@ function AppContent() {
     };
 
     // Solicita o token ao Android assim que o app carregar e o usuário estiver logado
-    if (user && (window as any).Android && (window as any).Android.getFCMToken) {
-      (window as any).Android.getFCMToken();
+    if (user && (window as any).Android) {
+      if ((window as any).Android.logMessage) (window as any).Android.logMessage("Tentando capturar FCM Token para: " + user.email);
+      if ((window as any).Android.getFCMToken) {
+        (window as any).Android.getFCMToken();
+      }
     }
+  }, [user]); // Adicionado dependência do user para disparar quando logar
 
-    return () => {
+  if (loading) {
       delete (window as any).handleAndroidLogin;
       delete (window as any).onNativeLoginComplete;
     };
