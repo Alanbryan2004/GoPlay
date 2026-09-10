@@ -97,13 +97,12 @@ function AppContent() {
         (window as any).Android.getFCMToken();
       }
     }
-  }, [user]); // Adicionado dependência do user para disparar quando logar
-
-  if (loading) {
+    return () => {
       delete (window as any).handleAndroidLogin;
       delete (window as any).onNativeLoginComplete;
+      delete (window as any).handleFCMToken;
     };
-  }, []);
+  }, [user]);
 
   if (loading) {
     return (
