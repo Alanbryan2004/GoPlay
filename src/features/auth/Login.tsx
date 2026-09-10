@@ -7,6 +7,13 @@ export default function Login() {
   const [erro, setErro] = useState<string | null>(null);
 
   const handleGoogleLogin = async () => {
+    // SUPORTE AO LOGIN NATIVO ANDROID (Operação Meridian Pattern)
+    if ((window as any).Android) {
+      setLoading(true);
+      (window as any).Android.startGoogleLogin();
+      return;
+    }
+
     setLoading(true);
     setErro(null);
 

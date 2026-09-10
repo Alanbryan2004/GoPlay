@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuth } from './hooks/useAuth';
+import { supabase } from './lib/supabase';
+import { useEffect } from 'react';
 import VersionGuard from './components/common/VersionGuard';
 
 // Layout Components
@@ -42,6 +44,34 @@ const queryClient = new QueryClient({
 function AppContent() {
   const { user, loading } = useAuth();
   const location = useLocation();
+
+  // SUPORTE AO LOGIN NATIVO ANDROID (Operação Meridian Pattern)
+  useEffect(() => {
+    (window as any).handleAndroidLogin = async (idToken: string) => {
+      try {
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+        });
+        if (error) throw error;
+        // O onAuthStateChange do useAuth cuidará do redirecionamento
+      } catch (err: any) {
+        console.error('Erro no login via Android:', err.message);
+      }
+    };
+
+    // Caso o Android precise informar que o login completou para fechar o teclado/ajustar UI
+    (window as any).onNativeLoginComplete = () => {
+      if ((window as any).Android && (window as any).Android.onLoginComplete) {
+        (window as any).Android.onLoginComplete();
+      }
+    };
+
+    return () => {
+      delete (window as any).handleAndroidLogin;
+      delete (window as any).onNativeLoginComplete;
+    };
+  }, []);
 
   if (loading) {
     return (
