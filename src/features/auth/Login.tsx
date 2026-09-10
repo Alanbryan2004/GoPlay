@@ -6,6 +6,17 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  useEffect(() => {
+    // Listener para o Android resetar o loading se o login for cancelado ou falhar
+    (window as any).resetLoginLoading = (mensagemErro?: string) => {
+      setLoading(false);
+      if (mensagemErro) setErro(mensagemErro);
+    };
+    return () => {
+      delete (window as any).resetLoginLoading;
+    };
+  }, []);
+
   const handleGoogleLogin = async () => {
     // SUPORTE AO LOGIN NATIVO ANDROID (Operação Meridian Pattern)
     if ((window as any).Android) {

@@ -47,16 +47,23 @@ function AppContent() {
 
   // SUPORTE AO LOGIN NATIVO ANDROID (Operação Meridian Pattern)
   useEffect(() => {
+    if ((window as any).Android) (window as any).Android.logMessage("Bridge Android detectado no App.tsx");
+
     (window as any).handleAndroidLogin = async (idToken: string) => {
+      if ((window as any).Android) (window as any).Android.logMessage("Recebendo Token do Android...");
       try {
         const { error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: idToken,
         });
         if (error) throw error;
-        // O onAuthStateChange do useAuth cuidará do redirecionamento
+        if ((window as any).Android) (window as any).Android.logMessage("Login Supabase Sucesso!");
       } catch (err: any) {
+        if ((window as any).Android) (window as any).Android.logMessage("Erro Supabase: " + err.message);
         console.error('Erro no login via Android:', err.message);
+        if ((window as any).resetLoginLoading) {
+          (window as any).resetLoginLoading('Falha na autenticação: ' + err.message);
+        }
       }
     };
 
@@ -66,6 +73,27 @@ function AppContent() {
         (window as any).Android.onLoginComplete();
       }
     };
+
+    // SUPORTE AO TOKEN DE NOTIFICAÇÃO (FCM)
+    (window as any).handleFCMToken = async (token: string) => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await supabase
+            .from('usuarios')
+            .update({ fcm_token: token })
+            .eq('email', session.user.email);
+          if ((window as any).Android) (window as any).Android.logMessage("FCM Token sincronizado com sucesso!");
+        }
+      } catch (err: any) {
+        console.error('Erro ao sincronizar FCM Token:', err.message);
+      }
+    };
+
+    // Solicita o token ao Android assim que o app carregar e o usuário estiver logado
+    if (user && (window as any).Android && (window as any).Android.getFCMToken) {
+      (window as any).Android.getFCMToken();
+    }
 
     return () => {
       delete (window as any).handleAndroidLogin;
