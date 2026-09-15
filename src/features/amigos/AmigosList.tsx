@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Usuario } from '../../types';
 import { UserPlus, UserCheck, MessageSquare, Search, Clock, X, Users } from 'lucide-react';
@@ -7,7 +7,16 @@ import Dialog from '../../components/common/Dialog';
 
 export default function AmigosList() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<'amigos' | 'adicionar'>('amigos');
+
+  // Detecta se deve abrir na aba "Adicionar" via parâmetro na URL (?tab=adicionar)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('tab') === 'adicionar') {
+      setActiveTab('adicionar');
+    }
+  }, [location]);
   const [users, setUsers] = useState<Usuario[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [amizades, setAmizades] = useState<any[]>([]);
