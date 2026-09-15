@@ -497,8 +497,8 @@ export default function Header() {
                 <div className="space-y-1.5">
                   {notifs.friendRequests > 0 && (
                     <button
-                      onClick={() => { setShowNotifPanel(false); setDrawerOpen(false); navigate('/amigos'); }}
-                      className="w-full flex items-center gap-2.5 p-2 bg-white rounded-xl border border-amber-200 hover:border-amber-400 transition-all text-left"
+                      onClick={() => { setShowNotifPanel(false); setDrawerOpen(false); navigate('/amigos?tab=adicionar'); }}
+                      className="w-full flex items-center gap-2.5 p-2 bg-white rounded-xl border border-amber-200 hover:border-amber-400 transition-all text-left cursor-pointer"
                     >
                       <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
                         <UserPlus size={13} className="text-violet-500" />

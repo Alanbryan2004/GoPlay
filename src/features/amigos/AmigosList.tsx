@@ -16,7 +16,7 @@ export default function AmigosList() {
     if (params.get('tab') === 'adicionar') {
       setActiveTab('adicionar');
     }
-  }, [location]);
+  }, [location.search]);
   const [users, setUsers] = useState<Usuario[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [amizades, setAmizades] = useState<any[]>([]);
