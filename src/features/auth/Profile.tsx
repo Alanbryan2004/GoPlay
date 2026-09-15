@@ -39,10 +39,10 @@ export default function Profile() {
     loadProfile();
   }, []);
 
-  // Otimiza e converte imagem para Base64 ultra comprimido para caber no VARCHAR(2000) do banco
-  const processImage = (file: File): Promise<string> => {
+  // Otimiza a imagem local e envia para o Supabase Storage (ou gera URL compacta)
+  const processAndUploadImage = async (file: File, userEmail: string): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const MAX_SIZE_MB = 5;
+      const MAX_SIZE_MB = 10;
       if (file.size > MAX_SIZE_MB * 1024 * 1024) {
         reject(new Error(`O arquivo deve ter no máximo ${MAX_SIZE_MB}MB.`));
         return;
@@ -51,53 +51,82 @@ export default function Profile() {
       const reader = new FileReader();
       reader.onload = (e) => {
         const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          
-          // Ajusta tamanho da thumbnail (ex: 120x120) para garantir < 2000 caracteres no Base64
-          const MAX_DIM = 120; 
+        img.onload = async () => {
+          try {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const MAX_DIM = 400; // Resolução excelente para foto de perfil
 
-          if (width > height) {
-            if (width > MAX_DIM) {
-              height = Math.round((height * MAX_DIM) / width);
-              width = MAX_DIM;
+            if (width > height) {
+              if (width > MAX_DIM) {
+                height = Math.round((height * MAX_DIM) / width);
+                width = MAX_DIM;
+              }
+            } else {
+              if (height > MAX_DIM) {
+                width = Math.round((width * MAX_DIM) / height);
+                height = MAX_DIM;
+              }
             }
-          } else {
-            if (height > MAX_DIM) {
-              width = Math.round((width * MAX_DIM) / height);
-              height = MAX_DIM;
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              reject(new Error('Erro ao processar imagem.'));
+              return;
             }
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Converte Canvas para Blob
+            canvas.toBlob(async (blob) => {
+              if (!blob) {
+                reject(new Error('Erro ao converter imagem.'));
+                return;
+              }
+
+              // 1. Tentar fazer o Upload no Supabase Storage
+              const fileExt = 'jpg';
+              const filePath = `${userEmail.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.${fileExt}`;
+
+              const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, blob, {
+                  contentType: 'image/jpeg',
+                  upsert: true,
+                });
+
+              if (!uploadError && uploadData) {
+                const { data: publicUrlData } = supabase.storage
+                  .from('avatars')
+                  .getPublicUrl(filePath);
+                
+                if (publicUrlData?.publicUrl) {
+                  resolve(publicUrlData.publicUrl);
+                  return;
+                }
+              }
+
+              // 2. Fallback: Se o bucket 'avatars' não existir no Supabase, reduzimos a micro-thumbnail
+              const microCanvas = document.createElement('canvas');
+              microCanvas.width = 80;
+              microCanvas.height = 80;
+              const microCtx = microCanvas.getContext('2d');
+              if (microCtx) {
+                microCtx.drawImage(img, 0, 0, 80, 80);
+                const base64Url = microCanvas.toDataURL('image/jpeg', 0.4);
+                if (base64Url.length <= 2000) {
+                  resolve(base64Url);
+                  return;
+                }
+              }
+
+              reject(new Error('Não foi possível enviar a imagem. Crie o bucket "avatars" no Supabase Storage.'));
+            }, 'image/jpeg', 0.8);
+          } catch (err: any) {
+            reject(err);
           }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            reject(new Error('Erro ao processar imagem no navegador.'));
-            return;
-          }
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Tenta gerar Base64 ultra compacto
-          let quality = 0.6;
-          let compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-
-          // Se por acaso exceder 2000 caracteres, reduz resolução para 90x90
-          if (compressedDataUrl.length > 1950) {
-            canvas.width = Math.min(width, 90);
-            canvas.height = Math.min(height, 90);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            compressedDataUrl = canvas.toDataURL('image/jpeg', 0.5);
-          }
-
-          if (compressedDataUrl.length > 2000) {
-            reject(new Error('Imagem muito detalhada para o limite de caracteres da conta.'));
-            return;
-          }
-
-          resolve(compressedDataUrl);
         };
         img.onerror = () => reject(new Error('Arquivo de imagem inválido.'));
         img.src = e.target?.result as string;
@@ -115,8 +144,8 @@ export default function Profile() {
     setErro(null);
 
     try {
-      const compressedImage = await processImage(file);
-      setFoto(compressedImage);
+      const uploadedUrl = await processAndUploadImage(file, email);
+      setFoto(uploadedUrl);
     } catch (err: any) {
       setErro(err.message || 'Erro ao carregar a foto do dispositivo.');
     } finally {
