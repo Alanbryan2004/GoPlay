@@ -39,10 +39,10 @@ export default function Profile() {
     loadProfile();
   }, []);
 
-  // Otimiza e converte imagem para Base64 comprimido (WebP/JPEG)
+  // Otimiza e converte imagem para Base64 ultra comprimido para caber no VARCHAR(2000) do banco
   const processImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const MAX_SIZE_MB = 2;
+      const MAX_SIZE_MB = 5;
       if (file.size > MAX_SIZE_MB * 1024 * 1024) {
         reject(new Error(`O arquivo deve ter no máximo ${MAX_SIZE_MB}MB.`));
         return;
@@ -55,7 +55,9 @@ export default function Profile() {
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          const MAX_DIM = 400; // Redimensiona para foto de perfil de boa resolução
+          
+          // Ajusta tamanho da thumbnail (ex: 120x120) para garantir < 2000 caracteres no Base64
+          const MAX_DIM = 120; 
 
           if (width > height) {
             if (width > MAX_DIM) {
@@ -78,8 +80,23 @@ export default function Profile() {
           }
           ctx.drawImage(img, 0, 0, width, height);
 
-          // Converte para WebP/JPEG comprimido
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          // Tenta gerar Base64 ultra compacto
+          let quality = 0.6;
+          let compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+
+          // Se por acaso exceder 2000 caracteres, reduz resolução para 90x90
+          if (compressedDataUrl.length > 1950) {
+            canvas.width = Math.min(width, 90);
+            canvas.height = Math.min(height, 90);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            compressedDataUrl = canvas.toDataURL('image/jpeg', 0.5);
+          }
+
+          if (compressedDataUrl.length > 2000) {
+            reject(new Error('Imagem muito detalhada para o limite de caracteres da conta.'));
+            return;
+          }
+
           resolve(compressedDataUrl);
         };
         img.onerror = () => reject(new Error('Arquivo de imagem inválido.'));
