@@ -1358,35 +1358,46 @@ export default function EventoDetails() {
           ? 'Confira o pódio do nosso evento no GoPlay! 🏆'
           : 'Confira o Time dos Sonhos e o Time Pesadelo do nosso evento no GoPlay! 🏆💀';
 
-        // 3. Tentar usar o Web Share API do navegador (comum em celulares e Android WebView)
+        // 3. Tentar usar o Web Share API do navegador ou Ponte Nativa do Android
         let sharedSuccess = false;
         try {
-          if (navigator.share) {
-            const canShareFiles = navigator.canShare && navigator.canShare({ files: [file] });
-            if (canShareFiles) {
+          // Se tiver a ponte nativa do Android registrada para compartilhar imagem/texto
+          if ((window as any).Android && (window as any).Android.shareImage) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const base64data = reader.result as string;
+              (window as any).Android.shareImage(base64data, bodyText);
+            };
+            reader.readAsDataURL(blob);
+            sharedSuccess = true;
+          } else if (navigator.share) {
+            // Tenta compartilhar o arquivo de imagem primeiro
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
               await navigator.share({
                 files: [file],
                 title: titleText,
                 text: bodyText
               });
               sharedSuccess = true;
+            } else if ((window as any).Android && (window as any).Android.shareText) {
+              (window as any).Android.shareText(`${bodyText}\n${window.location.href}`, titleText);
+              sharedSuccess = true;
             } else {
-              // Tenta compartilhar pelo menos o texto/título se arquivo não for aceito no canShare
               await navigator.share({
                 title: titleText,
-                text: bodyText
+                text: bodyText,
+                url: window.location.href
               });
               sharedSuccess = true;
             }
           }
         } catch (shareError: any) {
-          // Se o usuário cancelou o compartilhamento (AbortError), não fazemos nada
           if (shareError.name === 'AbortError') {
             sharedSuccess = true;
           }
         }
 
-        // 4. Fallback: Se não puder compartilhar direto e não foi abortado, faz o download da imagem
+        // 4. Fallback: Se nenhuma opção nativa funcionou no dispositivo
         if (!sharedSuccess) {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
