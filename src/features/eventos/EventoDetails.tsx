@@ -1332,13 +1332,22 @@ export default function EventoDetails() {
     if (!el) return;
 
     try {
-      // 1. Renderizar o elemento HTML em canvas usando html2canvas
+      // 1. Renderizar o elemento HTML em canvas usando html2canvas com suporte total a imagens cross-origin
       const html2canvas = (await import('html2canvas-pro')).default;
       const canvas = await html2canvas(el, {
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
-        scale: 2 // Alta definição
+        scale: 2,
+        logging: false,
+        imageTimeout: 15000,
+        onclone: (clonedDoc) => {
+          // Garante que todas as imagens no documento clonado fiquem com crossOrigin="anonymous"
+          const imgs = clonedDoc.querySelectorAll('img');
+          imgs.forEach((img) => {
+            img.crossOrigin = 'anonymous';
+          });
+        }
       });
 
       // 2. Converter o canvas para Blob
