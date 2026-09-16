@@ -1358,15 +1358,36 @@ export default function EventoDetails() {
           ? 'Confira o pódio do nosso evento no GoPlay! 🏆'
           : 'Confira o Time dos Sonhos e o Time Pesadelo do nosso evento no GoPlay! 🏆💀';
 
-        // 3. Tentar usar o Web Share API do navegador (comum em celulares)
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: titleText,
-            text: bodyText
-          });
-        } else {
-          // 4. Fallback: Se não puder compartilhar direto, faz o download da imagem
+        // 3. Tentar usar o Web Share API do navegador (comum em celulares e Android WebView)
+        let sharedSuccess = false;
+        try {
+          if (navigator.share) {
+            const canShareFiles = navigator.canShare && navigator.canShare({ files: [file] });
+            if (canShareFiles) {
+              await navigator.share({
+                files: [file],
+                title: titleText,
+                text: bodyText
+              });
+              sharedSuccess = true;
+            } else {
+              // Tenta compartilhar pelo menos o texto/título se arquivo não for aceito no canShare
+              await navigator.share({
+                title: titleText,
+                text: bodyText
+              });
+              sharedSuccess = true;
+            }
+          }
+        } catch (shareError: any) {
+          // Se o usuário cancelou o compartilhamento (AbortError), não fazemos nada
+          if (shareError.name === 'AbortError') {
+            sharedSuccess = true;
+          }
+        }
+
+        // 4. Fallback: Se não puder compartilhar direto e não foi abortado, faz o download da imagem
+        if (!sharedSuccess) {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
