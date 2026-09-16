@@ -219,12 +219,10 @@ export default function Profile() {
               </div>
             )}
 
-            {/* Botão de câmera sobreposto à foto */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="absolute bottom-0 right-0 p-2.5 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg border-2 border-white transition-transform active:scale-95"
+            {/* Botão / Ícone de câmera sobreposto à foto */}
+            <label
+              htmlFor="avatar-file-input"
+              className="absolute bottom-0 right-0 p-2.5 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg border-2 border-white transition-transform active:scale-95 cursor-pointer"
               title="Escolher foto da galeria"
             >
               {uploading ? (
@@ -232,11 +230,12 @@ export default function Profile() {
               ) : (
                 <Camera size={18} />
               )}
-            </button>
+            </label>
           </div>
 
           <input
             type="file"
+            id="avatar-file-input"
             ref={fileInputRef}
             onChange={handleFileChange}
             accept="image/*"
@@ -244,19 +243,18 @@ export default function Profile() {
           />
 
           <div className="flex items-center gap-2 mt-1">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="text-xs font-semibold text-red-600 hover:text-red-700 flex items-center gap-1 bg-red-50 py-1.5 px-3 rounded-lg border border-red-200 transition-all"
+            <label
+              htmlFor="avatar-file-input"
+              className="text-xs font-semibold text-red-600 hover:text-red-700 flex items-center gap-1 bg-red-50 py-1.5 px-3 rounded-lg border border-red-200 transition-all cursor-pointer active:scale-95"
             >
               <Upload size={14} />
               <span>Escolher do Celular</span>
-            </button>
+            </label>
 
             <button
               type="button"
               onClick={() => setShowUrlInput(!showUrlInput)}
-              className="text-xs font-semibold text-slate-600 hover:text-slate-800 flex items-center gap-1 bg-slate-100 py-1.5 px-3 rounded-lg border border-slate-200 transition-all"
+              className="text-xs font-semibold text-slate-600 hover:text-slate-800 flex items-center gap-1 bg-slate-100 py-1.5 px-3 rounded-lg border border-slate-200 transition-all cursor-pointer active:scale-95"
             >
               <Link size={14} />
               <span>{showUrlInput ? 'Ocultar URL' : 'Usar URL'}</span>
