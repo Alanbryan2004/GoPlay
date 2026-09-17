@@ -406,6 +406,8 @@ export default function EventosList() {
           <History size={13} />
           <span>Histórico ({historicoEventos.length})</span>
         </button>
+      </div>
+
       {/* Chips de Filtro por Modalidade Esportiva (ex: Basquete, Vôlei, Futebol) */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-2 no-scrollbar">
         <button
