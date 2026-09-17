@@ -97,6 +97,7 @@ export default function NovoEvento() {
       setObtendoGps(false);
     }
   };
+  const [dataEvento, setDataEvento] = useState('');
   const [hora, setHora] = useState('');
   const [modalidades, setModalidades] = useState<Modalidade[]>([]);
   const [loading, setLoading] = useState(false);
@@ -239,7 +240,7 @@ export default function NovoEvento() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!descricao || !local || !modalidadeId || !data || !hora) {
+    if (!descricao || !local || !modalidadeId || !dataEvento || !hora) {
       setErro('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
@@ -264,7 +265,7 @@ export default function NovoEvento() {
 
       // Combinar data e hora no fuso horário do Brasil e converter para UTC
       const fusoBrasil = 'America/Sao_Paulo';
-      const dataHoraStr = `${data}T${hora}:00`;
+      const dataHoraStr = `${dataEvento}T${hora}:00`;
       const utcDate = dayjs.tz(dataHoraStr, fusoBrasil).utc().format();
 
       // Configuração padrão do sorteio e vagas
@@ -656,8 +657,8 @@ export default function NovoEvento() {
               <input
                 type="date"
                 required
-                value={data}
-                onChange={(e) => setData(e.target.value)}
+                value={dataEvento}
+                onChange={(e) => setDataEvento(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/30 text-xs font-bold"
               />
             </div>

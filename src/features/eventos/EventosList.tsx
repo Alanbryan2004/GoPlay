@@ -7,7 +7,8 @@ import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import Dialog from '../../components/common/Dialog';
 import { verificarPermissaoGrupo } from '../../utils/permissoesGrupo';
-import { calcularDistanciaKm, getLocalizacaoAtual, GeoLocation } from '../../utils/geo';
+import type { GeoLocation } from '../../utils/geo';
+import { calcularDistanciaKm, getLocalizacaoAtual } from '../../utils/geo';
 
 export default function EventosList() {
   const navigate = useNavigate();
