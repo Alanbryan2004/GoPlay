@@ -425,10 +425,13 @@ export default function NovoEvento() {
                 value={local}
                 onChange={(e) => {
                   setLocal(e.target.value);
-                  setLatitude(null);
-                  setLongitude(null);
+                  // Não reseta latitude/longitude abruptamente se já tiver capturado GPS
                 }}
                 onFocus={() => { if (sugestoesEnderecos.length > 0) setShowSugestoes(true); }}
+                onBlur={() => {
+                  // Oculta sugestões após breve timeout para permitir o clique
+                  setTimeout(() => setShowSugestoes(false), 250);
+                }}
                 placeholder="Digite a rua, quadra ou arena..."
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-11 pr-8 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/30 text-sm font-semibold"
               />
@@ -446,7 +449,10 @@ export default function NovoEvento() {
                     <button
                       key={idx}
                       type="button"
-                      onClick={() => handleSelectEndereco(item)}
+                      onMouseDown={(e) => {
+                        e.preventDefault(); // Impede que o onBlur do input feche antes do clique
+                        handleSelectEndereco(item);
+                      }}
                       className="w-full text-left p-3 hover:bg-red-50/60 transition-colors flex items-start gap-2.5 cursor-pointer text-xs group"
                     >
                       <MapPin size={14} className="text-red-500 shrink-0 mt-0.5" />
