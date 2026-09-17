@@ -12,6 +12,7 @@ import BottomNavigation from './components/layout/BottomNavigation';
 // Auth Pages
 import Login from './features/auth/Login';
 import Profile from './features/auth/Profile';
+import Sobre from './features/common/Sobre';
 
 // Eventos Pages
 import EventosList from './features/eventos/EventosList';
@@ -146,6 +147,7 @@ function AppContent() {
           <Route path="/amigos" element={<AmigosList />} />
           <Route path="/mensagens" element={<MensagensPage />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/sobre" element={<Sobre />} />
           <Route path="/comunidades" element={<ComunidadesList />} />
           <Route path="/comunidades/:id" element={<ComunidadeDetails />} />
 

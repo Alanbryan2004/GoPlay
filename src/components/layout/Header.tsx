@@ -1,7 +1,7 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   User, LogOut, Menu, Users, Calendar, X, Home as HomeIcon,
-  UserPlus, Trophy, Network, Bell, MessageSquare, BookOpen
+  UserPlus, Trophy, Network, Bell, MessageSquare, BookOpen, Info
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useState, useEffect, useCallback } from 'react';
@@ -383,7 +383,9 @@ export default function Header() {
     location.pathname === '/ranking' ||
     location.pathname === '/amigos' ||
     location.pathname === '/comunidades' ||
-    location.pathname === '/mensagens';
+    location.pathname === '/mensagens' ||
+    location.pathname === '/sobre' ||
+    location.pathname === '/profile';
 
   if (!showSidebar) return null;
 
@@ -397,7 +399,7 @@ export default function Header() {
     { to: '/grupos', icon: Users, label: 'Grupos', badge: notifs.groupRequests },
     { to: '/comunidades', icon: Network, label: 'Comunidades', badge: 0 },
     { to: '/ranking', icon: Trophy, label: 'Ranking', badge: notifs.rankingChange ? 1 : 0, onClickExtra: markRankingSeen },
-    { to: '/profile', icon: User, label: 'Meu Perfil', badge: 0 },
+    { to: '/sobre', icon: Info, label: 'Sobre', badge: 0 },
   ];
 
   return (
