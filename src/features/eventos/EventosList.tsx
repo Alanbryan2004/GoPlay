@@ -43,9 +43,23 @@ export default function EventosList() {
     onConfirm: () => {},
   });
 
+  // Estados de Modalidades e Filtro
+  const [modalidades, setModalidades] = useState<any[]>([]);
+  const [selectedModalidadeId, setSelectedModalidadeId] = useState<string>('todos');
+
   useEffect(() => {
     fetchEventos();
+    fetchModalidades();
   }, [grupoId]);
+
+  const fetchModalidades = async () => {
+    try {
+      const { data } = await supabase.from('modalidades').select('*').order('nome');
+      if (data) setModalidades(data);
+    } catch (e) {
+      console.error('Erro ao buscar modalidades:', e);
+    }
+  };
 
   const handleAutoFinalizeEvents = async (pastEvents: Evento[]) => {
     try {
@@ -284,14 +298,19 @@ export default function EventosList() {
 
   const currentList = activeTab === 'ativos' ? eventos : historicoEventos;
   const filteredEventos = currentList.filter((evento) => {
-    // 1. Filtro de Texto (Nome ou Local)
+    // 1. Filtro de Modalidade Esportiva (ex: Basquete, Vôlei, Futebol)
+    if (selectedModalidadeId !== 'todos' && evento.modalidade_id !== selectedModalidadeId) {
+      return false;
+    }
+
+    // 2. Filtro de Texto (Nome ou Local)
     const matchText =
       evento.descricao.toLowerCase().includes(search.toLowerCase()) ||
       evento.local.toLowerCase().includes(search.toLowerCase());
 
     if (!matchText) return false;
 
-    // 2. Filtro por Raio (km) usando a localização GPS do usuário
+    // 3. Filtro por Raio (km) usando a localização GPS do usuário
     if (raioKm && userLocation) {
       if (evento.latitude != null && evento.longitude != null) {
         const dist = calcularDistanciaKm(
@@ -387,6 +406,33 @@ export default function EventosList() {
           <History size={13} />
           <span>Histórico ({historicoEventos.length})</span>
         </button>
+      {/* Chips de Filtro por Modalidade Esportiva (ex: Basquete, Vôlei, Futebol) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-2 no-scrollbar">
+        <button
+          type="button"
+          onClick={() => setSelectedModalidadeId('todos')}
+          className={`py-1.5 px-3 rounded-full text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer border ${
+            selectedModalidadeId === 'todos'
+              ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+              : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          🏆 Todos
+        </button>
+        {modalidades.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setSelectedModalidadeId(m.id)}
+            className={`py-1.5 px-3 rounded-full text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer border ${
+              selectedModalidadeId === m.id
+                ? 'bg-red-600 border-red-600 text-white shadow-xs'
+                : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {m.nome}
+          </button>
+        ))}
       </div>
 
       {/* Barra de Pesquisa + Botão de Filtro por Raio GPS */}
