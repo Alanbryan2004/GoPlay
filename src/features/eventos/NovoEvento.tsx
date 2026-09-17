@@ -43,6 +43,16 @@ export default function NovoEvento() {
   const [showSugestoes, setShowSugestoes] = useState(false);
   const [obtendoGps, setObtendoGps] = useState(false);
 
+  // Tenta capturar a localização atual silenciosamente para priorizar a busca de endereços da região do usuário (ex: Campinas)
+  useEffect(() => {
+    getLocalizacaoAtual()
+      .then((pos) => {
+        setLatitude(pos.latitude);
+        setLongitude(pos.longitude);
+      })
+      .catch(() => {});
+  }, []);
+
   // Efeito debounce para buscar sugestões de endereço enquanto digita
   useEffect(() => {
     if (!local || local.trim().length < 3) {
@@ -53,14 +63,14 @@ export default function NovoEvento() {
 
     const timer = setTimeout(async () => {
       setBuscandoEnderecos(true);
-      const results = await buscarEnderecosNominatim(local);
+      const results = await buscarEnderecosNominatim(local, latitude, longitude);
       setSugestoesEnderecos(results);
       setShowSugestoes(results.length > 0);
       setBuscandoEnderecos(false);
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [local]);
+  }, [local, latitude, longitude]);
 
   const handleSelectEndereco = (item: { display_name: string; lat: number; lon: number }) => {
     setLocal(item.display_name);

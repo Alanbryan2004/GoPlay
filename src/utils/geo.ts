@@ -33,19 +33,29 @@ export function calcularDistanciaKm(
 
 /**
  * Busca sugestões de endereço via OpenStreetMap Nominatim (Grátis, sem API key)
+ * Prioriza a região atual do usuário caso latitude/longitude sejam passadas
  */
-export async function buscarEnderecosNominatim(query: string): Promise<Array<{ display_name: string; lat: number; lon: number }>> {
+export async function buscarEnderecosNominatim(
+  query: string,
+  userLat?: number | null,
+  userLon?: number | null
+): Promise<Array<{ display_name: string; lat: number; lon: number }>> {
   if (!query || query.trim().length < 3) return [];
   try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=br&limit=5`,
-      {
-        headers: {
-          'Accept-Language': 'pt-BR,pt;q=0.9',
-          'User-Agent': 'GoPlay-App/1.0',
-        },
-      }
-    );
+    let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=br&limit=8`;
+    
+    // Se tiver a localização do usuário, define a viewbox de prioridade (~0.5 grau ao redor do usuário, ex: Campinas)
+    if (userLat != null && userLon != null) {
+      const viewbox = `${userLon - 0.5},${userLat + 0.5},${userLon + 0.5},${userLat - 0.5}`;
+      url += `&viewbox=${viewbox}&bounded=0`; // bounded=0 dá preferência à região sem esconder outros locais se necessário
+    }
+
+    const res = await fetch(url, {
+      headers: {
+        'Accept-Language': 'pt-BR,pt;q=0.9',
+        'User-Agent': 'GoPlay-App/1.0',
+      },
+    });
     if (!res.ok) return [];
     const data = await res.json();
     return data.map((item: any) => ({
