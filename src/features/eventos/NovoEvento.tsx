@@ -13,12 +13,15 @@ import {
   Lock,
   Globe,
   Plus,
-  Minus
+  Minus,
+  Navigation,
+  Compass
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/utc';
 import { verificarPermissaoGrupo } from '../../utils/permissoesGrupo';
+import { buscarEnderecosNominatim, getLocalizacaoAtual } from '../../utils/geo';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -32,7 +35,68 @@ export default function NovoEvento() {
   const [descricao, setDescricao] = useState('');
   const [local, setLocal] = useState('');
   const [modalidadeId, setModalidadeId] = useState('');
-  const [data, setData] = useState('');
+  // Estados de Localização e Autocompletar
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [sugestoesEnderecos, setSugestoesEnderecos] = useState<Array<{ display_name: string; lat: number; lon: number }>>([]);
+  const [buscandoEnderecos, setBuscandoEnderecos] = useState(false);
+  const [showSugestoes, setShowSugestoes] = useState(false);
+  const [obtendoGps, setObtendoGps] = useState(false);
+
+  // Efeito debounce para buscar sugestões de endereço enquanto digita
+  useEffect(() => {
+    if (!local || local.trim().length < 3) {
+      setSugestoesEnderecos([]);
+      setShowSugestoes(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setBuscandoEnderecos(true);
+      const results = await buscarEnderecosNominatim(local);
+      setSugestoesEnderecos(results);
+      setShowSugestoes(results.length > 0);
+      setBuscandoEnderecos(false);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [local]);
+
+  const handleSelectEndereco = (item: { display_name: string; lat: number; lon: number }) => {
+    setLocal(item.display_name);
+    setLatitude(item.lat);
+    setLongitude(item.lon);
+    setShowSugestoes(false);
+  };
+
+  const handleGetGPSLocation = async () => {
+    setObtendoGps(true);
+    try {
+      const pos = await getLocalizacaoAtual();
+      setLatitude(pos.latitude);
+      setLongitude(pos.longitude);
+      
+      // Tentar buscar o nome do endereço a partir do GPS (reverse geocoding)
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.latitude}&lon=${pos.longitude}`,
+          { headers: { 'Accept-Language': 'pt-BR,pt;q=0.9', 'User-Agent': 'GoPlay-App/1.0' } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.display_name) {
+            setLocal(data.display_name);
+          }
+        }
+      } catch {
+        if (!local) setLocal(`Localização via GPS (${pos.latitude.toFixed(4)}, ${pos.longitude.toFixed(4)})`);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Não foi possível obter sua localização GPS.');
+    } finally {
+      setObtendoGps(false);
+    }
+  };
   const [hora, setHora] = useState('');
   const [modalidades, setModalidades] = useState<Modalidade[]>([]);
   const [loading, setLoading] = useState(false);
@@ -231,6 +295,8 @@ export default function NovoEvento() {
         grupo_id: targetGrupoId,
         descricao: descricao.trim(),
         local: local.trim(),
+        latitude: latitude,
+        longitude: longitude,
         modalidade_id: modalidadeId,
         data: utcDate,
         participantes: [],
@@ -318,22 +384,81 @@ export default function NovoEvento() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
-              Local
-            </label>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Local / Endereço
+              </label>
+              <button
+                type="button"
+                onClick={handleGetGPSLocation}
+                disabled={obtendoGps}
+                className="text-[11px] font-bold text-red-600 hover:text-red-700 flex items-center gap-1 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg border border-red-200 transition-all cursor-pointer"
+                title="Preencher com localização GPS atual"
+              >
+                {obtendoGps ? (
+                  <div className="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Navigation size={12} />
+                )}
+                <span>{obtendoGps ? 'Buscando GPS...' : 'Usar meu GPS'}</span>
+              </button>
+            </div>
+
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
-                <MapPin size={18} />
+                <MapPin size={18} className={latitude ? 'text-red-600' : 'text-slate-400'} />
               </span>
               <input
                 type="text"
                 required
                 value={local}
-                onChange={(e) => setLocal(e.target.value)}
-                placeholder="Ex: Arena Soccer Beach"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-11 pr-4 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/30 text-sm font-semibold"
+                onChange={(e) => {
+                  setLocal(e.target.value);
+                  setLatitude(null);
+                  setLongitude(null);
+                }}
+                onFocus={() => { if (sugestoesEnderecos.length > 0) setShowSugestoes(true); }}
+                placeholder="Digite a rua, quadra ou arena..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-11 pr-8 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/30 text-sm font-semibold"
               />
+
+              {buscandoEnderecos && (
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                  <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+
+              {/* Lista Flutuante de Sugestões de Endereço */}
+              {showSugestoes && sugestoesEnderecos.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 max-h-56 overflow-y-auto divide-y divide-slate-100 animate-in fade-in">
+                  {sugestoesEnderecos.map((item, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSelectEndereco(item)}
+                      className="w-full text-left p-3 hover:bg-red-50/60 transition-colors flex items-start gap-2.5 cursor-pointer text-xs group"
+                    >
+                      <MapPin size={14} className="text-red-500 shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-slate-800 group-hover:text-red-600 leading-snug truncate">
+                          {item.display_name.split(',')[0]}
+                        </p>
+                        <p className="text-[10px] text-slate-500 truncate leading-normal">
+                          {item.display_name}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {latitude && longitude && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                <Compass size={12} />
+                <span>Coordenadas prontas para filtro por raio! ({latitude.toFixed(4)}, {longitude.toFixed(4)})</span>
+              </div>
+            )}
           </div>
 
           <div>

@@ -85,6 +85,8 @@ export interface Evento {
   grupo_id?: string;
   descricao: string;
   local: string;
+  latitude?: number | null;
+  longitude?: number | null;
   modalidade_id?: string;
   data: string;
   participantes: Participante[];

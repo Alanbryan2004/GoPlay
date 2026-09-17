@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Evento } from '../../types';
-import { Plus, Trash2, Calendar, MapPin, Search, ChevronRight, History, CheckCircle2, BookOpen, Users } from 'lucide-react';
+import { Plus, Trash2, Calendar, MapPin, Search, ChevronRight, History, CheckCircle2, BookOpen, Users, Navigation, SlidersHorizontal } from 'lucide-react';
 import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import Dialog from '../../components/common/Dialog';
 import { verificarPermissaoGrupo } from '../../utils/permissoesGrupo';
+import { calcularDistanciaKm, getLocalizacaoAtual, GeoLocation } from '../../utils/geo';
 
 export default function EventosList() {
   const navigate = useNavigate();
@@ -20,6 +21,12 @@ export default function EventosList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Estados do Filtro de Geolocalização por Raio
+  const [userLocation, setUserLocation] = useState<GeoLocation | null>(null);
+  const [raioKm, setRaioKm] = useState<number | null>(null); // null = todos os eventos, 5, 10, 25, 50
+  const [buscandoGps, setBuscandoGps] = useState(false);
+  const [showFiltroRaio, setShowFiltroRaio] = useState(false);
   const [dialog, setDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -260,11 +267,45 @@ export default function EventosList() {
     }
   };
 
+  const handleAtivarGpsFiltro = async (targetRaio: number) => {
+    setBuscandoGps(true);
+    try {
+      const pos = await getLocalizacaoAtual();
+      setUserLocation(pos);
+      setRaioKm(targetRaio);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao capturar GPS do dispositivo.');
+      setRaioKm(null);
+    } finally {
+      setBuscandoGps(false);
+    }
+  };
+
   const currentList = activeTab === 'ativos' ? eventos : historicoEventos;
-  const filteredEventos = currentList.filter((evento) =>
-    evento.descricao.toLowerCase().includes(search.toLowerCase()) ||
-    evento.local.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredEventos = currentList.filter((evento) => {
+    // 1. Filtro de Texto (Nome ou Local)
+    const matchText =
+      evento.descricao.toLowerCase().includes(search.toLowerCase()) ||
+      evento.local.toLowerCase().includes(search.toLowerCase());
+
+    if (!matchText) return false;
+
+    // 2. Filtro por Raio (km) usando a localização GPS do usuário
+    if (raioKm && userLocation) {
+      if (evento.latitude != null && evento.longitude != null) {
+        const dist = calcularDistanciaKm(
+          userLocation.latitude,
+          userLocation.longitude,
+          Number(evento.latitude),
+          Number(evento.longitude)
+        );
+        return dist <= raioKm;
+      }
+      return false; // oculta eventos sem coordenadas quando o filtro por raio está ativo
+    }
+
+    return true;
+  });
 
   return (
     <div className="px-4 py-3 pb-24 w-full max-w-md mx-auto relative min-h-[calc(100vh-8rem)]">
@@ -322,7 +363,7 @@ export default function EventosList() {
       </div>
 
       {/* Tabs de Seleção: Ativos vs Histórico */}
-      <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
+      <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
         <button
           onClick={() => setActiveTab('ativos')}
           className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
@@ -347,19 +388,79 @@ export default function EventosList() {
         </button>
       </div>
 
-      {/* Barra de Pesquisa */}
-      <div className="relative mb-4">
-        <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-          <Search size={18} />
-        </span>
-        <input
-          type="text"
-          placeholder="Buscar evento ou local..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition-all text-sm"
-        />
+      {/* Barra de Pesquisa + Botão de Filtro por Raio GPS */}
+      <div className="flex gap-2 mb-3">
+        <div className="relative flex-1">
+          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+            <Search size={18} />
+          </span>
+          <input
+            type="text"
+            placeholder="Buscar evento ou local..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition-all text-sm"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowFiltroRaio(!showFiltroRaio)}
+          className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+            raioKm
+              ? 'bg-red-600 border-red-600 text-white shadow-md'
+              : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+          }`}
+          title="Filtrar eventos por proximidade GPS"
+        >
+          <Navigation size={15} className={buscandoGps ? 'animate-spin' : ''} />
+          <span>{raioKm ? `${raioKm} km` : 'Raio'}</span>
+        </button>
       </div>
+
+      {/* Painel Expansível de Filtro por Raio (5km, 10km, 25km, 50km) */}
+      {(showFiltroRaio || raioKm) && (
+        <div className="mb-4 p-3 bg-red-50/60 border border-red-200/80 rounded-2xl space-y-2 animate-in fade-in">
+          <div className="flex items-center justify-between text-xs font-bold text-red-900">
+            <span className="flex items-center gap-1">
+              <Navigation size={14} className="text-red-600" />
+              <span>Eventos Próximos de Mim:</span>
+            </span>
+            {raioKm && (
+              <button
+                onClick={() => setRaioKm(null)}
+                className="text-[10px] font-bold text-red-600 hover:underline cursor-pointer"
+              >
+                Limpar filtro
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {[5, 10, 25, 50].map((km) => (
+              <button
+                key={km}
+                type="button"
+                onClick={() => handleAtivarGpsFiltro(km)}
+                disabled={buscandoGps}
+                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all cursor-pointer text-center ${
+                  raioKm === km
+                    ? 'bg-red-600 text-white shadow-sm'
+                    : 'bg-white border border-red-200 text-red-700 hover:bg-red-100'
+                }`}
+              >
+                {km} km
+              </button>
+            ))}
+          </div>
+
+          {userLocation && (
+            <p className="text-[10px] text-slate-500 text-center font-medium">
+              📍 GPS Ativo ({userLocation.latitude.toFixed(3)}, {userLocation.longitude.toFixed(3)})
+            </p>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center items-center h-48">
@@ -418,6 +519,11 @@ export default function EventosList() {
                   <div className="flex items-center gap-1.5 text-xs text-slate-500">
                     <MapPin size={13} className="text-cyan-500 flex-shrink-0" />
                     <span className="truncate">{evento.local}</span>
+                    {userLocation && evento.latitude != null && evento.longitude != null && (
+                      <span className="text-[10px] font-black text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.2 rounded-md ml-1 shrink-0">
+                        {calcularDistanciaKm(userLocation.latitude, userLocation.longitude, Number(evento.latitude), Number(evento.longitude))} km
+                      </span>
+                    )}
                   </div>
 
                   {/* Vagas e Confirmados */}
