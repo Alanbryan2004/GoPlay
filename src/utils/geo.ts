@@ -75,9 +75,23 @@ export async function buscarEnderecosNominatim(
 export function getLocalizacaoAtual(): Promise<GeoLocation> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error('Geolocalização não é suportada neste navegador.'));
+      reject(new Error('Geolocalização não é suportada neste dispositivo.'));
       return;
     }
+
+    const optionsHigh: PositionOptions = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000, // 5 minutos
+    };
+
+    const optionsLow: PositionOptions = {
+      enableHighAccuracy: false,
+      timeout: 15000,
+      maximumAge: 300000,
+    };
+
+    // Tenta primeiro com alta precisão (GPS)
     navigator.geolocation.getCurrentPosition(
       (position) => {
         resolve({
@@ -86,13 +100,33 @@ export function getLocalizacaoAtual(): Promise<GeoLocation> {
         });
       },
       (error) => {
-        let msg = 'Não foi possível capturar sua localização.';
-        if (error.code === error.PERMISSION_DENIED) {
-          msg = 'Permissão de localização negada pelo usuário.';
+        // Se der erro no GPS / alta precisão ou timeout, tenta baixa precisão (Rede/Torre)
+        if (error.code === error.TIMEOUT || error.code === error.POSITION_UNAVAILABLE) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              resolve({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+              });
+            },
+            (err) => {
+              let msg = 'Não foi possível obter a localização. Verifique se o GPS do celular está ligado.';
+              if (err.code === err.PERMISSION_DENIED) {
+                msg = 'Permissão de localização negada nas configurações do celular ou do aplicativo.';
+              }
+              reject(new Error(msg));
+            },
+            optionsLow
+          );
+        } else {
+          let msg = 'Não foi possível obter a localização.';
+          if (error.code === error.PERMISSION_DENIED) {
+            msg = 'Permissão de localização negada. Ative a permissão de Localização nas configurações do aplicativo/Android.';
+          }
+          reject(new Error(msg));
         }
-        reject(new Error(msg));
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      optionsHigh
     );
   });
 }
