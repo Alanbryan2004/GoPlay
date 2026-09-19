@@ -55,7 +55,21 @@ export default function EventosList() {
   const fetchModalidades = async () => {
     try {
       const { data } = await supabase.from('modalidades').select('*').order('nome');
-      if (data) setModalidades(data);
+      if (data) {
+        // Remove duplicatas de modalidades pelo nome (normalizado em minúsculas)
+        const uniqueModalidades: any[] = [];
+        const seenNames = new Set<string>();
+
+        data.forEach((m: any) => {
+          const normalizedName = m.nome.trim().toLowerCase();
+          if (!seenNames.has(normalizedName)) {
+            seenNames.add(normalizedName);
+            uniqueModalidades.push(m);
+          }
+        });
+
+        setModalidades(uniqueModalidades);
+      }
     } catch (e) {
       console.error('Erro ao buscar modalidades:', e);
     }
@@ -299,8 +313,20 @@ export default function EventosList() {
   const currentList = activeTab === 'ativos' ? eventos : historicoEventos;
   const filteredEventos = currentList.filter((evento) => {
     // 1. Filtro de Modalidade Esportiva (ex: Basquete, Vôlei, Futebol)
-    if (selectedModalidadeId !== 'todos' && evento.modalidade_id !== selectedModalidadeId) {
-      return false;
+    if (selectedModalidadeId !== 'todos') {
+      const targetMod = modalidades.find((m) => m.id === selectedModalidadeId);
+      const targetName = targetMod?.nome?.trim().toLowerCase();
+      
+      const eventMod = modalidades.find((m) => m.id === evento.modalidade_id);
+      const eventModName = eventMod?.nome?.trim().toLowerCase();
+
+      // Compara por ID ou pelo nome da modalidade (caso haja registros duplicados no banco)
+      const matchesId = evento.modalidade_id === selectedModalidadeId;
+      const matchesName = targetName && eventModName && targetName === eventModName;
+
+      if (!matchesId && !matchesName) {
+        return false;
+      }
     }
 
     // 2. Filtro de Texto (Nome ou Local)
